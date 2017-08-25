@@ -1,0 +1,22 @@
+{
+  "name": "babble.js",
+  "version": "1.0.0",
+  "description": "A library for creating and manipulating virtual puppets",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thepaperpilot/babble.js.git"
+  },
+  "author": "thepaperpilot",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/thepaperpilot/babble.js/issues"
+  },
+  "homepage": "https://github.com/thepaperpilot/babble.js#readme",
+  "dependencies": {
+    "pixi.js": "~4.5.3"
+  }
+}
