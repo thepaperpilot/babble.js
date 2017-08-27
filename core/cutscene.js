@@ -112,10 +112,10 @@ class Cutscene {
                 let newCallback = function() {
                     this.parseNextAction(script.slice(1), callback)
                 }.bind(this)
-                this.actions[command](newCallback, ...parameters)
+                this.actions[command].call(this, newCallback, ...parameters)
                 break
             case ',':
-                this.actions[command](this.empty, ...parameters)
+                this.actions[command].call(this, this.empty, ...parameters)
                 this.parseNextAction(script.slice(1), callback)
                 break
         }
