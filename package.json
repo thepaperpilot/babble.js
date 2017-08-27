@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/thepaperpilot/babble.js#readme",
   "dependencies": {
-    "pixi.js": "~4.5.3"
+    "pixi.js": "~4.5.3",
+    "pixi-timer": "~1.0.1"
   }
 }

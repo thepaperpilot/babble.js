@@ -1,5 +1,6 @@
 // imports
 const PIXI = require('pixi.js')
+const timer = require('pixi-timer')
 const Puppet = require('./Puppet')
 const path = require('path')
 const trim = require('/util/trimCanvas')
@@ -34,6 +35,7 @@ class Stage {
         this.assets = assets
         this.assetsPath = assetsPath
         this.status = status
+        this.PIXI = PIXI
 
         // Create some basic objects
         this.stage = new Container()
