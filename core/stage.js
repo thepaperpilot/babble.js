@@ -1,9 +1,11 @@
 // imports
 const PIXI = require('pixi.js')
+window.PIXI = PIXI;
+window.PIXI[ "default" ] = PIXI;
 const timer = require('pixi-timer')
-const Puppet = require('./Puppet')
+const Puppet = require('./puppet')
 const path = require('path')
-const trim = require('/util/trimCanvas')
+const trim = require('./../util/trimCanvas')
 
 // Constants
 const MOVE_DURATION = 0.75 // in seconds
@@ -35,7 +37,6 @@ class Stage {
         this.assets = assets
         this.assetsPath = assetsPath
         this.status = status
-        this.PIXI = PIXI
 
         // Create some basic objects
         this.stage = new Container()
@@ -339,6 +340,7 @@ class Stage {
             }
         }
         this.renderer.render(this.stage)
+        PIXI.timerManager.update()
     }
 
     getAsset(asset, layer) {

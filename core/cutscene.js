@@ -52,7 +52,7 @@ class Cutscene {
                 callback()
             },
             delay: function(callback, duration) {
-                let timer = this.stage.PIXI.timerManager.createTimer(duration)
+                let timer = PIXI.timerManager.createTimer(duration)
                 timer.on('end', callback)
                 timer.start()
             },
@@ -95,24 +95,29 @@ class Cutscene {
 
         let eol = script[0].trim().charAt(script[0].length - 1)
         let action = script[0].trim()
+        action = action.substring(0, action.length - 1)
         let command = action.split(" ")[0]
         let parameters = action.split(" ").slice(1)
         switch (eol) {
             default:
                 // Invalid end of line
                 if (callback) callback()
-                break;
+                break
             case ';':
                 if (this.actions[command] === null) {
                     // Invalid command
                     if (callback) callback()
+                    break
                 }
-                this.actions[command](() => {this.parseNextAction(script.slice(1), callback)}.bind(this), ...parameters)
-                break;
+                let newCallback = function() {
+                    this.parseNextAction(script.slice(1), callback)
+                }.bind(this)
+                this.actions[command](newCallback, ...parameters)
+                break
             case ',':
                 this.actions[command](this.empty, ...parameters)
                 this.parseNextAction(script.slice(1), callback)
-                break;
+                break
         }
     }
 
