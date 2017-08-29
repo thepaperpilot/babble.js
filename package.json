@@ -1,6 +1,6 @@
 {
   "name": "babble.js",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "A library for creating and manipulating virtual puppets",
   "main": "index.js",
   "scripts": {
