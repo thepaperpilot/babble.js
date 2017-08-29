@@ -6,7 +6,7 @@
  * Some parameters are optional
  * 
  * Default commands:
- * add {name} {position} {id} - adds a puppet with the given name at the given position, and optionally assigns it the given id 
+ * add {name} {id} [position] [facingLeft] [emote] - adds a puppet with the given name at the given position, assigns it the given id for later reference, and optionally overrides initial state
  * set {target} {name} - changes the given puppet (using assigned ids) to a new puppet with the given name
  * remove {target} - removes a given puppet from the stage
  * delay {duration} - simply waits, should generally be used as a ";" action
@@ -39,8 +39,17 @@ class Cutscene {
         this.start = function() {this.parseNextAction(_script.split("\n"), _callback)}
 
         this.actions = {
-            add: function(callback, name, position, id) {
-                this.stage.addPuppet(this.actors[name], id).position = position
+            add: function(callback, name, id, position, facingLeft, emote) {
+                // Copy our actor from our actors object
+                let actor = JSON.parse(JSON.stringify(this.actors[name]))
+                
+                // If optional parameters are set, apply them to our actor
+                if (typeof position !== 'undefined' && position !== null) actor.position = position
+                if (typeof facingLeft !== 'undefined' && facingLeft !== null) actor.facingLeft = facingLeft
+                if (typeof emote !== 'undefined' && emote !== null) actor.emote = emote
+
+                // Add our actor to the stage
+                this.stage.addPuppet(actor, id)
                 callback()
             },
             set: function(callback, target, name) {
