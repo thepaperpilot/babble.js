@@ -61,9 +61,12 @@ class Cutscene {
                 callback()
             },
             delay: function(callback, duration) {
-                let timer = PIXI.timerManager.createTimer(parseInt(duration))
-                timer.on('end', callback)
-                timer.start()
+                if (duration <= 0) requestAnimationFrame(callback)
+                else {
+                    let timer = PIXI.timerManager.createTimer(parseInt(duration))
+                    timer.on('end', callback)
+                    timer.start()
+                }
             },
             move: function(callback, target, position) {
                 let puppet = this.stage.getPuppet(target)
