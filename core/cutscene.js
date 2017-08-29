@@ -98,7 +98,7 @@ class Cutscene {
     parseNextAction(script, callback) {
         if (script.length === 0 || script[0].trim() === "") {
             // Cutscene finished successully
-            if (callback) callback()
+            if (callback) requestAnimationFrame(callback)
             return
         }
 
@@ -110,12 +110,12 @@ class Cutscene {
         switch (eol) {
             default:
                 // Invalid end of line
-                if (callback) callback()
+                if (callback) requestAnimationFrame(callback)
                 break
             case ';':
                 if (this.actions[command] === null) {
                     // Invalid command
-                    if (callback) callback()
+                    if (callback) requestAnimationFrame(callback)
                     break
                 }
                 let newCallback = function() {
