@@ -80,7 +80,7 @@ class Cutscene {
             },
             babble: function(callback, target, action) {
                 let puppet = this.stage.getPuppet(target)
-                let babble = (action || "toggle") === "toggle" ? !target.babbling : action === "start"
+                let babble = (action || "toggle") === "toggle" ? !puppet.babbling : action === "start"
                 puppet.setBabbling(babble)
                 callback()
             },
