@@ -61,11 +61,11 @@ class Cutscene {
                 puppet.target = position
                 puppet.movingAnim = 0
                 if (position > puppet.position) {
-                    this.facingLeft = false
-                    this.container.scale.x = 1
+                    puppet.facingLeft = false
+                    puppet.container.scale.x = 1
                 } else {
-                    this.facingLeft = true
-                    this.container.scale.x = -1
+                    puppet.facingLeft = true
+                    puppet.container.scale.x = -1
                 }
                 this.actions.delay(callback, this.stage.MOVE_DURATION * 1000)
             },
