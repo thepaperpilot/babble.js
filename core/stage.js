@@ -31,13 +31,15 @@ class Stage {
      * @param {string} assetsPath - path to the assets folder
      * @param {requestCallback} callback - function to be called after assets are loaded
      * @param {Object} [status] - object for logging stuff
+     * @param {boolean} [enabled] - whether or not it should start updating from the start
      */
-    constructor(element, project, assets, assetsPath, callback, status) {
+    constructor(element, project, assets, assetsPath, callback, status, enabled) {
         this.project = project
         this.assets = assets
         this.assetsPath = assetsPath
         this.status = status
         this.MOVE_DURATION = MOVE_DURATION
+        this.enabled = enabled
 
         // Create some basic objects
         this.stage = new Container()
@@ -242,6 +244,29 @@ class Stage {
         this.lastFrame = thisFrame
 
         requestAnimationFrame(this.gameLoop.bind(this))
+        if (this.enabled) this.update(delta)
+    }
+
+    getAsset(asset, layer) {
+        let sprite
+        if (this.assets[asset.tab] && this.assets[asset.tab][asset.hash]) {
+            sprite = new Sprite(TextureCache[path.join(this.assetsPath, this.assets[asset.tab][asset.hash].location)])
+        } else {
+            sprite = new Sprite()
+            if (this.status) this.status.log("Unable to load asset \"" + asset.tab + ":" + asset.hash + "\"", 5, 2)
+        }
+        sprite.anchor.set(0.5)
+        sprite.x = asset.x
+        sprite.y = asset.y
+        sprite.rotation = asset.rotation
+        sprite.scale.x = asset.scaleX
+        sprite.scale.y = asset.scaleY
+        sprite.layer = layer
+        sprite.asset = asset
+        return sprite
+    }
+
+    update(delta) {
         for (let i = 0; i < this.puppets.length; i++) {
             let puppet = this.puppets[i]
             // Movement animations
@@ -343,26 +368,7 @@ class Stage {
             }
         }
         this.renderer.render(this.stage)
-        PIXI.timerManager.update()
-    }
-
-    getAsset(asset, layer) {
-        let sprite
-        if (this.assets[asset.tab] && this.assets[asset.tab][asset.hash]) {
-            sprite = new Sprite(TextureCache[path.join(this.assetsPath, this.assets[asset.tab][asset.hash].location)])
-        } else {
-            sprite = new Sprite()
-            if (this.status) this.status.log("Unable to load asset \"" + asset.tab + ":" + asset.hash + "\"", 5, 2)
-        }
-        sprite.anchor.set(0.5)
-        sprite.x = asset.x
-        sprite.y = asset.y
-        sprite.rotation = asset.rotation
-        sprite.scale.x = asset.scaleX
-        sprite.scale.y = asset.scaleY
-        sprite.layer = layer
-        sprite.asset = asset
-        return sprite
+        PIXI.timerManager.update(delta / 1000)
     }
 }
 
