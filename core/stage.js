@@ -37,6 +37,7 @@ class Stage {
         this.assets = assets
         this.assetsPath = assetsPath
         this.status = status
+        this.MOVE_DURATION = MOVE_DURATION
 
         // Create some basic objects
         this.stage = new Container()

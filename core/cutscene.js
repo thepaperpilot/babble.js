@@ -76,7 +76,7 @@ class Cutscene {
                     puppet.facingLeft = true
                     puppet.container.scale.x = -1
                 }
-                this.actions.delay(callback, this.stage.MOVE_DURATION * 1000)
+                this.actions.delay(callback, (Math.abs(puppet.target - puppet.position) * this.stage.MOVE_DURATION * 0.6 + this.stage.MOVE_DURATION * 0.4) * 1000)
             },
             babble: function(callback, target, action) {
                 let puppet = this.stage.getPuppet(target)
