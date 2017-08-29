@@ -72,7 +72,7 @@ class Cutscene {
                 if (position > puppet.position) {
                     puppet.facingLeft = false
                     puppet.container.scale.x = 1
-                } else {
+                } else if (position != puppet.position) {
                     puppet.facingLeft = true
                     puppet.container.scale.x = -1
                 }
