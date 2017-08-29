@@ -54,7 +54,6 @@ class Stage {
         // Make the game fit the entire window
         this.renderer.view.style.position = "absolute";
         this.renderer.view.style.display = "block";
-        this.renderer.autoResize = true;
 
         // Load Assets
         let texturesToLoad = false
@@ -72,7 +71,6 @@ class Stage {
         if (texturesToLoad) {
             loader.onComplete.once(function() { 
                 stage.resize()
-                window.addEventListener("resize", stage.resize.bind(stage))
                 if (callback) callback(stage)
                 stage.gameLoop()
             })
@@ -80,7 +78,6 @@ class Stage {
         } else {
             loader.load()
             stage.resize()
-            window.addEventListener("resize", stage.resize.bind(stage))
             if (callback) callback(stage)
             stage.gameLoop()
         }
@@ -145,9 +142,13 @@ class Stage {
         this.resize()
     }
 
-    resize() {
-        this.renderer.resize(this.screen.clientWidth, this.screen.clientHeight)
-        this.slotWidth = this.screen.clientWidth / this.project.numCharacters
+    resize(e, width, height) {
+        this.bounds = {
+            width: width || this.screen.clientWidth,
+            height: height || this.screen.clientHeight
+        }
+        this.renderer.resize(this.bounds.width, this.bounds.height)
+        this.slotWidth = this.bounds.width / this.project.numCharacters
         if (this.slotWidth < 400) {
             this.puppetStage.scale.x = this.puppetStage.scale.y = this.slotWidth / 400
             this.slotWidth = 400
@@ -160,7 +161,7 @@ class Stage {
             }
             puppet.container.scale.x = puppet.container.scale.y = (this.project.puppetScale || 1) 
             puppet.container.scale.x *= puppet.facingLeft ? -1 : 1
-            puppet.container.y = this.screen.clientHeight / this.puppetStage.scale.y
+            puppet.container.y = this.bounds.height / this.puppetStage.scale.y
             puppet.container.x = (puppet.position - 0.5) * this.slotWidth
         }
     }
@@ -175,7 +176,7 @@ class Stage {
         this.puppetStage.addChild(puppet.container)
         for (let i = 0; i < this.listeners.length; i++)
             puppet.container.on(this.listeners[i].event, this.listeners[i].callback)
-        puppet.container.y = this.screen.clientHeight / this.puppetStage.scale.y
+        puppet.container.y = this.bounds.height / this.puppetStage.scale.y
         puppet.container.x = (puppet.position - 0.5) * this.slotWidth
         return puppet
     }
@@ -217,7 +218,7 @@ class Stage {
 
         for (let i = 0; i < this.listeners.length; i++)
             newPuppet.container.on(this.listeners[i].event, this.listeners[i].callback)
-        newPuppet.container.y = this.screen.clientHeight / this.puppetStage.scale.y
+        newPuppet.container.y = this.bounds.height / this.puppetStage.scale.y
         newPuppet.container.x = (newPuppet.position - 0.5) * this.slotWidth
 
         this.puppets[this.puppets.indexOf(oldPuppet)] = newPuppet
@@ -266,7 +267,7 @@ class Stage {
                 // Scale in a sin formation such that it does 3 half circles per slot, plus 2 more at the end
                 puppet.container.scale.y = 1 + Math.sin((1 + puppet.movingAnim * 5) * Math.PI) / 40
                 // Update y value so it doesn't leave the bottom of the screen while bouncing
-                puppet.container.y = this.screen.clientHeight / this.puppetStage.scale.y
+                puppet.container.y = this.bounds.height / this.puppetStage.scale.y
                 // Linearly move across the slot, unless we're in the (.6 - 1) part of the animation
                 puppet.container.x = (puppet.position + direction * (puppet.movingAnim >= 0.6 ? 0 : puppet.movingAnim / 0.6) - 0.5) * this.slotWidth
 
