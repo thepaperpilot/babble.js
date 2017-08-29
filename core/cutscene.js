@@ -45,7 +45,7 @@ class Cutscene {
                 
                 // If optional parameters are set, apply them to our actor
                 if (typeof position !== 'undefined' && position !== null) actor.position = parseInt(position)
-                if (typeof facingLeft !== 'undefined' && facingLeft !== null) actor.facingLeft = !!facingLeft
+                if (typeof facingLeft !== 'undefined' && facingLeft !== null) actor.facingLeft = facingLeft == "true"
                 if (typeof emote !== 'undefined' && emote !== null) actor.emote = emote
 
                 // Add our actor to the stage
