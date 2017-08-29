@@ -44,8 +44,8 @@ class Cutscene {
                 let actor = JSON.parse(JSON.stringify(this.actors[name]))
                 
                 // If optional parameters are set, apply them to our actor
-                if (typeof position !== 'undefined' && position !== null) actor.position = position
-                if (typeof facingLeft !== 'undefined' && facingLeft !== null) actor.facingLeft = facingLeft
+                if (typeof position !== 'undefined' && position !== null) actor.position = parseInt(position)
+                if (typeof facingLeft !== 'undefined' && facingLeft !== null) actor.facingLeft = !!facingLeft
                 if (typeof emote !== 'undefined' && emote !== null) actor.emote = emote
 
                 // Add our actor to the stage
@@ -61,13 +61,13 @@ class Cutscene {
                 callback()
             },
             delay: function(callback, duration) {
-                let timer = PIXI.timerManager.createTimer(duration)
+                let timer = PIXI.timerManager.createTimer(parseInt(duration))
                 timer.on('end', callback)
                 timer.start()
             },
             move: function(callback, target, position) {
                 let puppet = this.stage.getPuppet(target)
-                puppet.target = position
+                puppet.target = parseInt(position)
                 puppet.movingAnim = 0
                 if (position > puppet.position) {
                     puppet.facingLeft = false
