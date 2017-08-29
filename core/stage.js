@@ -158,7 +158,8 @@ class Stage {
                 puppet.position = puppet.target = this.project.numCharacters + 1
                 puppet.movingAnim = 0
             }
-            puppet.container.scale.x = puppet.container.scale.y = (this.project.puppetScale || 1) * puppet.facingLeft ? -1 : 1
+            puppet.container.scale.x = puppet.container.scale.y = (this.project.puppetScale || 1) 
+            puppet.container.scale.x *= puppet.facingLeft ? -1 : 1
             puppet.container.y = this.screen.clientHeight / this.puppetStage.scale.y
             puppet.container.x = (puppet.position - 0.5) * this.slotWidth
         }
