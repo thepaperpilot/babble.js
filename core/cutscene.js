@@ -17,6 +17,7 @@
  *
  * Actions are defined in the cutscene's "actions" object. You can add functions to that object to add custom actions.
  * The function will be passed a callback function to be called when the action is complete, as well as any parameters passed to the action
+ * You can use `this` to access references to the stage and actors
  *
  * To start the cutscene, just call cutscene.start()
  *
@@ -34,9 +35,7 @@ class Cutscene {
         this.stage = stage
         this.actors = actors
 
-        var _script = script
-        var _callback = callback
-        this.start = function() {this.parseNextAction(_script.split("\n"), _callback)}
+        this.start = function() {this.parseNextAction(script.split("\n"), callback)}
 
         this.actions = {
             add: function(callback, name, id, position, facingLeft, emote) {
@@ -99,34 +98,47 @@ class Cutscene {
     }
 
     parseNextAction(script, callback) {
-        if (script.length === 0 || script[0].trim() === "") {
+        // Remove any empty lines from the script
+        while (script.length > 0 && script[0].trim() === "") {
+            script.splice(0, 1)
+        }
+
+        // Check if script is complete
+        if (script.length === 0) {
             // Cutscene finished successully
             if (callback) requestAnimationFrame(callback)
             return
         }
 
+        // Parse current line of script
         let eol = script[0].trim().charAt(script[0].length - 1)
         let action = script[0].trim()
         action = action.substring(0, action.length - 1)
         let command = action.split(" ")[0]
         let parameters = action.split(" ").slice(1)
+
+        // Confirm command exists
+        if (this.actions[command] === null) {
+            // Invalid command
+            if (callback) requestAnimationFrame(callback)
+            break
+        }
+
+        // Run action
         switch (eol) {
             default:
-                // Invalid end of line
+                // Invalid end of line, stop the cutscene
                 if (callback) requestAnimationFrame(callback)
                 break
             case ';':
-                if (this.actions[command] === null) {
-                    // Invalid command
-                    if (callback) requestAnimationFrame(callback)
-                    break
-                }
+                // Complete this action before proceeding
                 let newCallback = function() {
                     this.parseNextAction(script.slice(1), callback)
                 }.bind(this)
                 this.actions[command].call(this, newCallback, ...parameters)
                 break
             case ',':
+                // Perform this action and immediately continue
                 this.actions[command].call(this, this.empty, ...parameters)
                 this.parseNextAction(script.slice(1), callback)
                 break
