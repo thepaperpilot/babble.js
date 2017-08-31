@@ -31,7 +31,7 @@ class Stage {
      * @param {string} assetsPath - path to the assets folder
      * @param {requestCallback} callback - function to be called after assets are loaded
      * @param {Object} [status] - object for logging stuff
-     * @param {boolean} [enabled] - whether or not it should start updating from the start
+     * @param {boolean} [enabled=true] - whether or not it should start updating from the start
      */
     constructor(element, project, assets, assetsPath, callback, status, enabled) {
         this.project = project
@@ -39,7 +39,7 @@ class Stage {
         this.assetsPath = assetsPath
         this.status = status
         this.MOVE_DURATION = MOVE_DURATION
-        this.enabled = enabled
+        this.enabled = enabled === undefined ? true : enabled
 
         // Create some basic objects
         this.stage = new Container()
