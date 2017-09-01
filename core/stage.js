@@ -28,6 +28,7 @@ class Stage {
     /**
      * @param {string} element - the id of the DOM element to append the stage to
      * @param {Object} project - object with information on the assets, puppets, and stage settings
+     * @param {Object[][]} assets - array of assets
      * @param {string} assetsPath - path to the assets folder
      * @param {requestCallback} callback - function to be called after assets are loaded
      * @param {Object} [status] - object for logging stuff
@@ -168,19 +169,19 @@ class Stage {
         }
     }
 
-    createPuppet(obj) {
-        return new Puppet(this, obj, -1)
+    createPuppet(puppet) {
+        return new Puppet(this, puppet, -1)
     }
 
-    addPuppet(obj, id) {
-        let puppet = new Puppet(this, obj, id)
-        this.puppets.push(puppet)
-        this.puppetStage.addChild(puppet.container)
+    addPuppet(puppet, id) {
+        let newPuppet = new Puppet(this, puppet, id)
+        this.puppets.push(newPuppet)
+        this.puppetStage.addChild(newPuppet.container)
         for (let i = 0; i < this.listeners.length; i++)
-            puppet.container.on(this.listeners[i].event, this.listeners[i].callback)
-        puppet.container.y = this.bounds.height / this.puppetStage.scale.y
-        puppet.container.x = (puppet.position - 0.5) * this.slotWidth
-        return puppet
+            newPuppet.container.on(this.listeners[i].event, this.listeners[i].callback)
+        newPuppet.container.y = this.bounds.height / this.puppetStage.scale.y
+        newPuppet.container.x = (newPuppet.position - 0.5) * this.slotWidth
+        return newPuppet
     }
 
     removePuppet(id) {
@@ -235,6 +236,7 @@ class Stage {
             return trim(this.renderer.plugins.extract.canvas(this.stage)).canvas.toDataURL().replace(/^data:image\/\w+;base64,/, "")
         } catch(e) {
             this.status.error("Failed to generate thumbnail", e)
+            return null
         }
     }
 

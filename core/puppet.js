@@ -19,7 +19,6 @@ class Puppet {
         this.babbling = false
         this.stage = stage
         this.id = id
-        this.name = puppet.name
         this.container = new Container()
         this.position = this.target = puppet.position
         this.facingLeft = puppet.facingLeft
@@ -107,6 +106,8 @@ class Puppet {
             this.emotes['default'].eyes.visible = true
         }
     }
+
+    // TODO replace these with a `move(amount)` function, that accepts negative values
 
     moveLeft() {
         if (this.target > this.position) return
