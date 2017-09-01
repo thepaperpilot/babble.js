@@ -121,7 +121,6 @@ class Cutscene {
         if (this.actions[command] === null) {
             // Invalid command
             if (callback) requestAnimationFrame(callback)
-            break
         }
 
         // Run action
