@@ -249,7 +249,7 @@ class Stage {
         if (this.enabled) this.update(delta)
     }
 
-    getAsset(asset, layer) {
+    getAsset(asset, layer, emote) {
         let sprite
         if (this.assets[asset.tab] && this.assets[asset.tab][asset.hash]) {
             sprite = new Sprite(TextureCache[path.join(this.assetsPath, this.assets[asset.tab][asset.hash].location)])
@@ -263,8 +263,9 @@ class Stage {
         sprite.rotation = asset.rotation
         sprite.scale.x = asset.scaleX
         sprite.scale.y = asset.scaleY
-        sprite.layer = layer
         sprite.asset = asset
+        sprite.layer = layer
+        sprite.emote = emote
         return sprite
     }
 
