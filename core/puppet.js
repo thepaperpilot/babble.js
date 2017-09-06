@@ -88,7 +88,8 @@ class Puppet {
         this.container.puppet = puppet
         this.container.y = stage.screen.clientHeight / stage.puppetStage.scale.y
         this.container.x = (this.position - 0.5) * stage.slotWidth
-        if (this.facingLeft) this.container.scale.x = -1
+        this.container.scale.x = this.container.scale.y = (stage.project.puppetScale || 1) 
+        this.container.scale.x *= this.facingLeft ? -1 : 1
     }
 
     changeEmote(emote) {
