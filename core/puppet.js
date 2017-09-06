@@ -56,10 +56,10 @@ class Puppet {
             this.mouthsContainer.addChild(this.emotes[emotes[i]].mouth)
             this.eyesContainer.addChild(this.emotes[emotes[i]].eyes)
             for (let j = 0; j < puppet.emotes[emotes[i]].mouth.length; j++) {
-                this.emotes[emotes[i]].mouth.addChild(stage.getAsset(puppet.emotes[emotes[i]].mouth[j], emotes[i] + '-emote'))
+                this.emotes[emotes[i]].mouth.addChild(stage.getAsset(puppet.emotes[emotes[i]].mouth[j], 'mouth'))
             }
             for (let j = 0; j < puppet.emotes[emotes[i]].eyes.length; j++) {
-                this.emotes[emotes[i]].eyes.addChild(stage.getAsset(puppet.emotes[emotes[i]].eyes[j], emotes[i] + '-emote'))
+                this.emotes[emotes[i]].eyes.addChild(stage.getAsset(puppet.emotes[emotes[i]].eyes[j], 'eyes'))
             }
         }
         this.head.addChild(this.mouthsContainer)
