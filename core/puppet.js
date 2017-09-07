@@ -115,10 +115,10 @@ class Puppet {
         if (this.facingLeft || this.position === 0 || this.position == this.stage.project.numCharacters + 1) {
             this.target--
             this.facingLeft = true
-            this.container.scale.x = -1
+            this.container.scale.x = -1 * (this.stage.project.puppetScale || 1)
         } else {
             this.facingLeft = true
-            this.container.scale.x = -1
+            this.container.scale.x = -1 * (this.stage.project.puppetScale || 1)
         }
     }
 
@@ -127,10 +127,10 @@ class Puppet {
         if (!this.facingLeft || this.position === 0 || this.position == this.stage.project.numCharacters + 1) {
             this.target++
             this.facingLeft = false
-            this.container.scale.x = 1
+            this.container.scale.x = 1 * (this.stage.project.puppetScale || 1)
         } else {
             this.facingLeft = false
-            this.container.scale.x = 1
+            this.container.scale.x = 1 * (this.stage.project.puppetScale || 1)
         }
     }
 

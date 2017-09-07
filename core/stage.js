@@ -217,7 +217,7 @@ class Stage {
         newPuppet.position = oldPuppet.position
         newPuppet.target = oldPuppet.target
         newPuppet.facingLeft = oldPuppet.facingLeft
-        newPuppet.container.scale.x = newPuppet.facingLeft ? -1 : 1
+        newPuppet.container.scale.x = (newPuppet.facingLeft ? -1 : 1) * (this.project.puppetScale || 1) 
 
         for (let i = 0; i < this.listeners.length; i++)
             newPuppet.container.on(this.listeners[i].event, this.listeners[i].callback)
@@ -293,7 +293,7 @@ class Stage {
                 } else if (puppet.movingAnim >= 1) puppet.movingAnim = 0
 
                 // Scale in a sin formation such that it does 3 half circles per slot, plus 2 more at the end
-                puppet.container.scale.y = 1 + Math.sin((1 + puppet.movingAnim * 5) * Math.PI) / 40
+                puppet.container.scale.y = (1 + Math.sin((1 + puppet.movingAnim * 5) * Math.PI) / 40) * (this.project.puppetScale || 1) 
                 // Update y value so it doesn't leave the bottom of the screen while bouncing
                 puppet.container.y = this.bounds.height / this.puppetStage.scale.y
                 // Linearly move across the slot, unless we're in the (.6 - 1) part of the animation
