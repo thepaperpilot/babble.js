@@ -29,6 +29,8 @@ class Puppet {
         this.eyesDuration = this.mouthDuration = this.deadbonesDuration = 0
         this.deadbonesTargetY = this.deadbonesStartY = 0
         this.deadbonesTargetRotation = this.deadbonesStartRotation = 0
+        this.eyeBabbleDuration = puppet.eyeBabbleDuration || 2000
+        this.mouthBabbleDuration = puppet.mouthBabbleDuration || 270
 
         // Construct Puppet
         this.body = new Container()

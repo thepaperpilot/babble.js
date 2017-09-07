@@ -326,7 +326,7 @@ class Stage {
                     let eyes = puppet.eyes[Math.floor(Math.random() * puppet.eyes.length)]
                     puppet.emotes[puppet.emotes[eyes] ? eyes : 'default'].eyes.visible = true
                     puppet.eyesAnim = 0
-                    puppet.eyesDuration = Math.random() * 2000 + 200
+                    puppet.eyesDuration = (0.1 + Math.random()) * puppet.eyeBabbleDuration
                 }
 
                 // Update mouth
@@ -339,9 +339,7 @@ class Stage {
                     let mouth = puppet.mouths[Math.floor(Math.random() * puppet.mouths.length)]
                     puppet.emotes[puppet.emotes[mouth] ? mouth : 'default'].mouth.visible = true
                     puppet.mouthAnim = 0
-                    puppet.mouthDuration = Math.random() * 200 + 50
-                    if (puppet.deadbonesStyle)
-                        puppet.mouthDuration *= 20
+                    puppet.mouthDuration = (0.1 + Math.random()) * puppet.mouthBabbleDuration
                 }
             }
             // Update DeadbonesStyle Babbling
