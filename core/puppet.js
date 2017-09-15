@@ -48,20 +48,21 @@ class Puppet {
         this.emotes = {}
         this.mouthsContainer = new Container()
         this.eyesContainer = new Container()
-        let emotes = Object.keys(puppet.emotes)
-        for (let i = 0; i < emotes.length; i++) {
-            if (!puppet.emotes[emotes[i]].enabled) continue
-            this.emotes[emotes[i]] = {
+        for (let i = 0; i < puppet.emotes.length; i++) {
+            let emote = puppet.emotes[i]
+            this.emotes[i] = {
                 "mouth": new Container(),
-                "eyes": new Container()
+                "eyes": new Container(),
+                enabled: emote.enabled,
+                name: emote.name
             }
-            this.mouthsContainer.addChild(this.emotes[emotes[i]].mouth)
-            this.eyesContainer.addChild(this.emotes[emotes[i]].eyes)
-            for (let j = 0; j < puppet.emotes[emotes[i]].mouth.length; j++) {
-                this.emotes[emotes[i]].mouth.addChild(stage.getAsset(puppet.emotes[emotes[i]].mouth[j], 'mouth', emotes[i]))
+            this.mouthsContainer.addChild(this.emotes[i].mouth)
+            this.eyesContainer.addChild(this.emotes[i].eyes)
+            for (let j = 0; j < puppet.emotes[i].mouth.length; j++) {
+                this.emotes[i].mouth.addChild(stage.getAsset(puppet.emotes[i].mouth[j], 'mouth', i))
             }
-            for (let j = 0; j < puppet.emotes[emotes[i]].eyes.length; j++) {
-                this.emotes[emotes[i]].eyes.addChild(stage.getAsset(puppet.emotes[emotes[i]].eyes[j], 'eyes', emotes[i]))
+            for (let j = 0; j < puppet.emotes[i].eyes.length; j++) {
+                this.emotes[i].eyes.addChild(stage.getAsset(puppet.emotes[i].eyes[j], 'eyes', i))
             }
         }
         this.head.addChild(this.mouthsContainer)
@@ -95,18 +96,18 @@ class Puppet {
     }
 
     changeEmote(emote) {
-        this.emote = emote
+        this.emote = emote || '0'
         let emotes = Object.keys(this.emotes)
         for (let i = 0; i < emotes.length; i++) {
             this.emotes[emotes[i]].mouth.visible = false
             this.emotes[emotes[i]].eyes.visible = false
         }
-        if (this.emotes[emote]) {
+        if (emote && this.emotes[emote].enabled) {
             this.emotes[emote].mouth.visible = true
             this.emotes[emote].eyes.visible = true
         } else {
-            this.emotes['default'].mouth.visible = true
-            this.emotes['default'].eyes.visible = true
+            this.emotes['0'].mouth.visible = true
+            this.emotes['0'].eyes.visible = true
         }
     }
 

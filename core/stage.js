@@ -317,14 +317,14 @@ class Stage {
                 puppet.mouthAnim += delta
 
                 // Update eyes
-                if (puppet.eyesAnim >= puppet.eyesDuration && puppet.eyes.length && (puppet.emote === 'default' || !puppet.emotes[puppet.emote])) {
+                if (puppet.eyesAnim >= puppet.eyesDuration && puppet.eyes.length && (puppet.emote === '0' || !puppet.emotes[puppet.emote])) {
                     if (puppet.emotes[puppet.emote]) puppet.emotes[puppet.emote].eyes.visible = false
-                    puppet.emotes['default'].eyes.visible = false
+                    puppet.emotes['0'].eyes.visible = false
                     for (let j = 0; j < puppet.eyes.length; j++) {
                         if (puppet.emotes[puppet.eyes[j]]) puppet.emotes[puppet.eyes[j]].eyes.visible = false
                     }
                     let eyes = puppet.eyes[Math.floor(Math.random() * puppet.eyes.length)]
-                    puppet.emotes[puppet.emotes[eyes] ? eyes : 'default'].eyes.visible = true
+                    puppet.emotes[puppet.emotes[eyes] ? eyes : '0'].eyes.visible = true
                     puppet.eyesAnim = 0
                     puppet.eyesDuration = (0.1 + Math.random()) * puppet.eyeBabbleDuration
                 }
@@ -332,12 +332,12 @@ class Stage {
                 // Update mouth
                 if (puppet.mouthAnim >= puppet.mouthDuration && puppet.mouths.length) {
                     if (puppet.emotes[puppet.emote]) puppet.emotes[puppet.emote].mouth.visible = false
-                    puppet.emotes['default'].mouth.visible = false
+                    puppet.emotes['0'].mouth.visible = false
                     for (let j = 0; j < puppet.mouths.length; j++) {
                         if (puppet.emotes[puppet.mouths[j]]) puppet.emotes[puppet.mouths[j]].mouth.visible = false
                     }
                     let mouth = puppet.mouths[Math.floor(Math.random() * puppet.mouths.length)]
-                    puppet.emotes[puppet.emotes[mouth] ? mouth : 'default'].mouth.visible = true
+                    puppet.emotes[puppet.emotes[mouth] ? mouth : '0'].mouth.visible = true
                     puppet.mouthAnim = 0
                     puppet.mouthDuration = (0.1 + Math.random()) * puppet.mouthBabbleDuration
                 }
