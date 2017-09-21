@@ -18,6 +18,7 @@ let BaseTextureCache = PIXI.utils.BaseTextureCache,
     TextureCache = PIXI.utils.TextureCache,
     autoDetectRenderer = PIXI.autoDetectRenderer,
     loader = PIXI.loader,
+    Rectangle = PIXI.Rectangle,
     ticker = PIXI.ticker
 
 /**
@@ -92,11 +93,13 @@ class Stage {
             this.puppets[i].container.on(event, callback)
     }
 
-    addAsset(asset) {
-        if (!this.assets[asset.tab])
-            this.assets[asset.tab] = {}
-        this.assets[asset.tab][asset.hash] = {"name": asset.name, "location": path.join(asset.tab, asset.hash + '.png')}
-        TextureCache[path.join(this.assetsPath, this.assets[asset.tab][asset.hash].location)] = Texture.fromImage(path.join(this.assetsPath, this.assets[asset.tab][asset.hash].location))
+    addAsset(tab, id, asset, callback) {
+        if (!this.assets[tab])
+            this.assets[tab] = {}
+        this.assets[tab][id] = asset
+        TextureCache[path.join(this.assetsPath, asset.location)] = Texture.fromImage(path.join(this.assetsPath, asset.location))
+        if (callback)
+            TextureCache[path.join(this.assetsPath, asset.location)].baseTexture.on('loaded', callback)
     }
 
     reloadAssets(callback) {
@@ -131,6 +134,22 @@ class Stage {
         this.reloadPuppets()
         if (callback) {
             ticker.shared.add(onLoad)
+        }
+    }
+
+    updateAsset(tab, hash) {
+        let stage = this
+        let callback = function(asset, sprite) {
+            let parent = sprite.parent
+            let index = parent.getChildIndex(sprite)
+            let newAsset = stage.getAsset(asset)
+            newAsset.layer = asset.layer
+            newAsset.emote = asset.emote
+            parent.removeChildAt(index)
+            parent.addChildAt(newAsset, index)
+        }
+        for (let i = 0; i < this.puppets.length; i++) {
+            this.puppets[i].applyToAsset({tab, hash}, callback)
         }
     }
 
@@ -252,7 +271,21 @@ class Stage {
     getAsset(asset, layer, emote) {
         let sprite
         if (this.assets[asset.tab] && this.assets[asset.tab][asset.hash]) {
-            sprite = new Sprite(TextureCache[path.join(this.assetsPath, this.assets[asset.tab][asset.hash].location)])
+            let assetData = this.assets[asset.tab][asset.hash]
+            if (assetData.type === "animated") {
+                let base = BaseTextureCache[path.join(this.assetsPath, assetData.location)]
+                let textures = []
+                let width = base.width / assetData.cols
+                let height = base.height / assetData.rows
+                for (let i = 0; i < assetData.numFrames; i++) {
+                    if ((i % assetData.cols) * width + width > base.width || Math.floor(i / assetData.cols) * height + height > base.height) continue
+                    let rect = new Rectangle((i % assetData.cols) * width, Math.floor(i / assetData.cols) * height, width, height)
+                    textures.push(new Texture(base, rect))
+                }
+                sprite = new PIXI.extras.AnimatedSprite(textures)
+                sprite.animationSpeed = 20 / assetData.delay
+                sprite.play()
+            } else sprite = new Sprite(TextureCache[path.join(this.assetsPath, assetData.location)])
         } else {
             sprite = new Sprite()
             if (this.status) this.status.log("Unable to load asset \"" + asset.tab + ":" + asset.hash + "\"", 5, 2)
