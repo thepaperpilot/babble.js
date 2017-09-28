@@ -7,45 +7,44 @@ The stage is what controls the puppets, and uses PIXI to render them. It takes t
 - `element` string - The id of the DOM element to append the stage to
 - `project` Object
 	- `numCharacters` Number - The number of slots for characters
-	- `assets` Object[] - Array of lists of assets
-		- `name` string - Name of the asset list
-		- `location` string - Path to JSON file for the asset list, relative to `assetsPath`
 	- `puppetScale` Number - (optional) A multiplier to scale puppets by
-- `assets` assets - array of assets
+- `assets` Object{} - Dictionary of assets
 - `assetsPath` string - Path to the assets folder
 - `callback` Function - (optional) Function to be called after assets are loaded
 - `status` Object - (optional) Object with functions for logging stuff
 - `enabled` boolean - (optional, default=true) Whether or not it should start updating from the start
 
-Asset lists are JSON files with a single JSON object where each member is an identifier for the asset, pointing to an object with the following properties:
+Different types of assets may require different fields, but they'll all need the following:
 
 - `name` string - Name of the asset
 - `location` string - Location of the image file, relative to `assetsPath`
+- `type` string - The type of asset, e.g. "sprite" or "animated"
 
 > example asset list file:
 >
 > ```
-> {
->   "94370077": {
->     "name": "brow_excited",
->     "location": "eyebrows/94370077.png"
->   },
->   "-1478408941": {
->     "name": "brow_normal",
->     "location": "eyebrows/-1478408941.png"
->   },
->   "-1370165314": {
->     "name": "brow_confused",
->     "location": "eyebrows/-1370165314.png"
->   },
->   "-894109551": {
->     "name": "brow_sad",
->     "location": "eyebrows/-894109551.png"
->   },
->   "-1624236206": {
->     "name": "brow_angry",
->     "location": "eyebrows/-1624236206.png"
->   }
+> "165e1af4-93ac-4566-a5eb-bddb4fbcd16c:0": {
+>     "type": "sprite",
+>     "name": "Rawb_no",
+>     "location": "165e1af4-93ac-4566-a5eb-bddb4fbcd16c/0.png"
+> },
+> "165e1af4-93ac-4566-a5eb-bddb4fbcd16c:1": {
+>     "type": "animated",
+>     "name": "O7GAtbK",
+>     "rows": 12,
+>     "cols": 12,
+>     "numFrames": 141,
+>     "delay": 40,
+>     "location": "165e1af4-93ac-4566-a5eb-bddb4fbcd16c/1.png"
+> },
+> "165e1af4-93ac-4566-a5eb-bddb4fbcd16c:2": {
+>     "type": "animated",
+>     "name": "1",
+>     "rows": 4,
+>     "cols": 4,
+>     "numFrames": 16,
+>     "delay": 100,
+>     "location": "165e1af4-93ac-4566-a5eb-bddb4fbcd16c/2.png"
 > }
 > ```
 

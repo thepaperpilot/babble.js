@@ -29,7 +29,7 @@ class Stage {
     /**
      * @param {string} element - the id of the DOM element to append the stage to
      * @param {Object} project - object with information on the assets, puppets, and stage settings
-     * @param {Object[][]} assets - array of assets
+     * @param {Object[]} assets - array of assets
      * @param {string} assetsPath - path to the assets folder
      * @param {requestCallback} callback - function to be called after assets are loaded
      * @param {Object} [status] - object for logging stuff
@@ -61,14 +61,11 @@ class Stage {
 
         // Load Assets
         let texturesToLoad = false
-        for (let i = 0; i < project.assets.length; i++) {
-            let tab = assets[project.assets[i].name]
-            let keys = Object.keys(tab)
-            for (let j = 0; j < keys.length; j++) {
-                if (!TextureCache[path.join(assetsPath, tab[keys[j]].location)]) {
-                    loader.add(path.join(assetsPath, tab[keys[j]].location))
-                    texturesToLoad = true
-                }
+        let keys = Object.keys(assets)
+        for (let i = 0; i < keys.length; i++) {
+            if (!TextureCache[path.join(assetsPath, assets[keys[i]].location)]) {
+                loader.add(path.join(assetsPath, assets[keys[i]].location))
+                texturesToLoad = true
             }
         }
         let stage = this
@@ -93,10 +90,8 @@ class Stage {
             this.puppets[i].container.on(event, callback)
     }
 
-    addAsset(tab, id, asset, callback) {
-        if (!this.assets[tab])
-            this.assets[tab] = {}
-        this.assets[tab][id] = asset
+    addAsset(id, asset, callback) {
+        this.assets[id] = asset
         TextureCache[path.join(this.assetsPath, asset.location)] = Texture.fromImage(path.join(this.assetsPath, asset.location))
         if (callback)
             TextureCache[path.join(this.assetsPath, asset.location)].baseTexture.on('loaded', callback)
@@ -109,13 +104,10 @@ class Stage {
         }
 
         // Load Assets
-        for (let i = 0; i < this.project.assets.length; i++) {
-            let tab = this.assets[this.project.assets[i].name]
-            let keys = Object.keys(tab)
-            for (let j = 0; j < keys.length; j++) {
-                if (!TextureCache[path.join(this.assetsPath, tab[keys[j]].location)]) {
-                    TextureCache[path.join(this.assetsPath, tab[keys[j]].location)] = Texture.fromImage(path.join(this.assetsPath, tab[keys[j]].location))
-                }
+        let keys = Object.keys(assets)
+        for (let i = 0; i < keys.length; i++) {
+            if (!TextureCache[path.join(this.assetsPath, assets[keys[i]].location)]) {
+                TextureCache[path.join(this.assetsPath, assets[keys[i]].location)] = Texture.fromImage(path.join(this.assetsPath, assets[keys[i]].location))
             }
         }
         let stage = this
@@ -137,7 +129,7 @@ class Stage {
         }
     }
 
-    updateAsset(tab, hash) {
+    updateAsset(id) {
         let stage = this
         let callback = function(asset, sprite) {
             let parent = sprite.parent
@@ -149,7 +141,7 @@ class Stage {
             parent.addChildAt(newAsset, index)
         }
         for (let i = 0; i < this.puppets.length; i++) {
-            this.puppets[i].applyToAsset({tab, hash}, callback)
+            this.puppets[i].applyToAsset(id, callback)
         }
     }
 
@@ -270,8 +262,8 @@ class Stage {
 
     getAsset(asset, layer, emote) {
         let sprite
-        if (this.assets[asset.tab] && this.assets[asset.tab][asset.hash]) {
-            let assetData = this.assets[asset.tab][asset.hash]
+        if (this.assets[asset.id]) {
+            let assetData = this.assets[asset.id]
             if (assetData.type === "animated") {
                 let base = BaseTextureCache[path.join(this.assetsPath, assetData.location)]
                 let textures = []
@@ -288,7 +280,7 @@ class Stage {
             } else sprite = new Sprite(TextureCache[path.join(this.assetsPath, assetData.location)])
         } else {
             sprite = new Sprite()
-            if (this.status) this.status.log("Unable to load asset \"" + asset.tab + ":" + asset.hash + "\"", 5, 2)
+            if (this.status) this.status.log("Unable to load asset \"" + asset.id + "\"", 5, 2)
         }
         sprite.anchor.set(0.5)
         sprite.x = asset.x

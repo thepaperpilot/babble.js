@@ -172,22 +172,22 @@ class Puppet {
         this.eyesContainer.addChild(this.emotes[emote].eyes)
     }
 
-    applyToAsset(asset, callback) {
+    applyToAsset(id, callback) {
         let character = this.container.puppet
         let topLevel = ["body", "head", "hat", "props"]
 
         for (let j = 0; j < topLevel.length; j++)
             for (let k = 0; k < character[topLevel[j]].length; k++)
-                if (character[topLevel[j]][k].tab === asset.tab && character[topLevel[j]][k].hash === asset.hash)
+                if (character[topLevel[j]][k].id === id)
                     callback(character[topLevel[j]][k], this[topLevel[j] === "head" ? "headBase" : topLevel[j]].children[k])
                 
         let emotes = Object.keys(character.emotes)
         for (let j = 0; j < emotes.length; j++) {
             for (let k = 0; k < character.emotes[emotes[j]].eyes.length; k++)
-                if (character.emotes[emotes[j]].eyes[k].tab === asset.tab && character.emotes[emotes[j]].eyes[k].hash === asset.hash)
+                if (character.emotes[emotes[j]].eyes[k].id === id)
                     callback(character.emotes[emotes[j]].eyes[k], this.emotes[emotes[j]].eyes.children[k])
             for (let k = 0; k < character.emotes[emotes[j]].mouth.length; k++)
-                if (character.emotes[emotes[j]].mouth[k].tab === asset.tab && character.emotes[emotes[j]].mouth[k].hash === asset.hash)
+                if (character.emotes[emotes[j]].mouth[k].id === id)
                     callback(character.emotes[emotes[j]].mouth[k], this.emotes[emotes[j]].mouth.children[k])
         }
     }
