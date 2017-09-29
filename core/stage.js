@@ -104,10 +104,10 @@ class Stage {
         }
 
         // Load Assets
-        let keys = Object.keys(assets)
+        let keys = Object.keys(this.assets)
         for (let i = 0; i < keys.length; i++) {
-            if (!TextureCache[path.join(this.assetsPath, assets[keys[i]].location)]) {
-                TextureCache[path.join(this.assetsPath, assets[keys[i]].location)] = Texture.fromImage(path.join(this.assetsPath, assets[keys[i]].location))
+            if (!TextureCache[path.join(this.assetsPath, this.assets[keys[i]].location)]) {
+                TextureCache[path.join(this.assetsPath, this.assets[keys[i]].location)] = Texture.fromImage(path.join(this.assetsPath, this.assets[keys[i]].location))
             }
         }
         let stage = this
