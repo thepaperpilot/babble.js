@@ -99,6 +99,7 @@ class Cutscene {
     }
 
     parseNextAction(script, callback) {
+        console.log(script)
         // Remove any empty lines from the script
         while (script.length > 0 && script[0].trim() === "") {
             script.splice(0, 1)
@@ -111,8 +112,28 @@ class Cutscene {
             return
         }
 
+        if (script[0].trim().charAt(0) === '(') {
+            for (let i = 0; i < script.length; i++) {
+                if (script[i].trim().length > 1 && script[i].trim().charAt(script[i].trim().length - 2) === ')') {
+                    let eol = script[i].trim().charAt(script[i].trim().length - 1)
+                    script[0] = script[0].trim().substring(1)
+                    script[i] = script[i].trim().substring(0, script[i].trim().length - 2)
+                    let newCallback = function() {
+                        this.parseNextAction(script.slice(i + 1), callback)
+                    }.bind(this)
+                    if (eol === ';') {
+                        this.parseNextAction(script.slice(0, i + 1), newCallback)
+                    } else if (eol === ',') {
+                        this.parseNextAction(script.slice(0, i + 1), this.empty)
+                        requestAnimationFrame(newCallback)
+                    } else break;
+                    return;
+                }
+            }
+        }
+
         // Parse current line of script
-        let eol = script[0].trim().charAt(script[0].length - 1)
+        let eol = script[0].trim().charAt(script[0].trim().length - 1)
         let action = script[0].trim()
         action = action.substring(0, action.length - 1)
         let command = action.split(" ")[0]
@@ -143,6 +164,7 @@ class Cutscene {
                 this.parseNextAction(script.slice(1), callback)
                 break
         }
+        console.log("!")
     }
 
     // Used for callbacks that don't need to do anything. 
@@ -328,23 +350,23 @@ class Puppet {
         this.eyesContainer.addChild(this.emotes[emote].eyes)
     }
 
-    applyToAsset(asset, callback) {
+    applyToAsset(id, callback) {
         let character = this.container.puppet
         let topLevel = ["body", "head", "hat", "props"]
 
         for (let j = 0; j < topLevel.length; j++)
             for (let k = 0; k < character[topLevel[j]].length; k++)
-                if (character[topLevel[j]][k].tab === asset.tab && character[topLevel[j]][k].hash === asset.hash)
-                    callback(character[topLevel[j]][k])
+                if (character[topLevel[j]][k].id === id)
+                    callback(character[topLevel[j]][k], this[topLevel[j] === "head" ? "headBase" : topLevel[j]].children[k])
                 
         let emotes = Object.keys(character.emotes)
         for (let j = 0; j < emotes.length; j++) {
             for (let k = 0; k < character.emotes[emotes[j]].eyes.length; k++)
-                if (character.emotes[emotes[j]].eyes[k].tab === asset.tab && character.emotes[emotes[j]].eyes[k].hash === asset.hash)
-                    callback(character.emotes[emotes[j]].eyes[k])
+                if (character.emotes[emotes[j]].eyes[k].id === id)
+                    callback(character.emotes[emotes[j]].eyes[k], this.emotes[emotes[j]].eyes.children[k])
             for (let k = 0; k < character.emotes[emotes[j]].mouth.length; k++)
-                if (character.emotes[emotes[j]].mouth[k].tab === asset.tab && character.emotes[emotes[j]].mouth[k].hash === asset.hash)
-                    callback(character.emotes[emotes[j]].mouth[k])
+                if (character.emotes[emotes[j]].mouth[k].id === id)
+                    callback(character.emotes[emotes[j]].mouth[k], this.emotes[emotes[j]].mouth.children[k])
         }
     }
 }
@@ -372,6 +394,7 @@ let BaseTextureCache = PIXI.utils.BaseTextureCache,
     TextureCache = PIXI.utils.TextureCache,
     autoDetectRenderer = PIXI.autoDetectRenderer,
     loader = PIXI.loader,
+    Rectangle = PIXI.Rectangle,
     ticker = PIXI.ticker
 
 /**
@@ -382,7 +405,7 @@ class Stage {
     /**
      * @param {string} element - the id of the DOM element to append the stage to
      * @param {Object} project - object with information on the assets, puppets, and stage settings
-     * @param {Object[][]} assets - array of assets
+     * @param {Object[]} assets - array of assets
      * @param {string} assetsPath - path to the assets folder
      * @param {requestCallback} callback - function to be called after assets are loaded
      * @param {Object} [status] - object for logging stuff
@@ -414,14 +437,11 @@ class Stage {
 
         // Load Assets
         let texturesToLoad = false
-        for (let i = 0; i < project.assets.length; i++) {
-            let tab = assets[project.assets[i].name]
-            let keys = Object.keys(tab)
-            for (let j = 0; j < keys.length; j++) {
-                if (!TextureCache[path.join(assetsPath, tab[keys[j]].location)]) {
-                    loader.add(path.join(assetsPath, tab[keys[j]].location))
-                    texturesToLoad = true
-                }
+        let keys = Object.keys(assets)
+        for (let i = 0; i < keys.length; i++) {
+            if (!TextureCache[path.join(assetsPath, assets[keys[i]].location)]) {
+                loader.add(path.join(assetsPath, assets[keys[i]].location))
+                texturesToLoad = true
             }
         }
         let stage = this
@@ -446,11 +466,11 @@ class Stage {
             this.puppets[i].container.on(event, callback)
     }
 
-    addAsset(asset) {
-        if (!this.assets[asset.tab])
-            this.assets[asset.tab] = {}
-        this.assets[asset.tab][asset.hash] = {"name": asset.name, "location": path.join(asset.tab, asset.hash + '.png')}
-        TextureCache[path.join(this.assetsPath, this.assets[asset.tab][asset.hash].location)] = Texture.fromImage(path.join(this.assetsPath, this.assets[asset.tab][asset.hash].location))
+    addAsset(id, asset, callback) {
+        this.assets[id] = asset
+        TextureCache[path.join(this.assetsPath, asset.location)] = Texture.fromImage(path.join(this.assetsPath, asset.location + "?random=" + new Date()))
+        if (callback)
+            TextureCache[path.join(this.assetsPath, asset.location)].baseTexture.on('loaded', callback)
     }
 
     reloadAssets(callback) {
@@ -460,13 +480,10 @@ class Stage {
         }
 
         // Load Assets
-        for (let i = 0; i < this.project.assets.length; i++) {
-            let tab = this.assets[this.project.assets[i].name]
-            let keys = Object.keys(tab)
-            for (let j = 0; j < keys.length; j++) {
-                if (!TextureCache[path.join(this.assetsPath, tab[keys[j]].location)]) {
-                    TextureCache[path.join(this.assetsPath, tab[keys[j]].location)] = Texture.fromImage(path.join(this.assetsPath, tab[keys[j]].location))
-                }
+        let keys = Object.keys(this.assets)
+        for (let i = 0; i < keys.length; i++) {
+            if (!TextureCache[path.join(this.assetsPath, this.assets[keys[i]].location)]) {
+                TextureCache[path.join(this.assetsPath, this.assets[keys[i]].location)] = Texture.fromImage(path.join(this.assetsPath, this.assets[keys[i]].location))
             }
         }
         let stage = this
@@ -485,6 +502,22 @@ class Stage {
         this.reloadPuppets()
         if (callback) {
             ticker.shared.add(onLoad)
+        }
+    }
+
+    updateAsset(id) {
+        let stage = this
+        let callback = function(asset, sprite) {
+            let parent = sprite.parent
+            let index = parent.getChildIndex(sprite)
+            let newAsset = stage.getAsset(asset)
+            newAsset.layer = asset.layer
+            newAsset.emote = asset.emote
+            parent.removeChildAt(index)
+            parent.addChildAt(newAsset, index)
+        }
+        for (let i = 0; i < this.puppets.length; i++) {
+            this.puppets[i].applyToAsset(id, callback)
         }
     }
 
@@ -605,11 +638,25 @@ class Stage {
 
     getAsset(asset, layer, emote) {
         let sprite
-        if (this.assets[asset.tab] && this.assets[asset.tab][asset.hash]) {
-            sprite = new Sprite(TextureCache[path.join(this.assetsPath, this.assets[asset.tab][asset.hash].location)])
+        if (this.assets[asset.id]) {
+            let assetData = this.assets[asset.id]
+            if (assetData.type === "animated") {
+                let base = BaseTextureCache[path.join(this.assetsPath, assetData.location)]
+                let textures = []
+                let width = base.width / assetData.cols
+                let height = base.height / assetData.rows
+                for (let i = 0; i < assetData.numFrames; i++) {
+                    if ((i % assetData.cols) * width + width > base.width || Math.floor(i / assetData.cols) * height + height > base.height) continue
+                    let rect = new Rectangle((i % assetData.cols) * width, Math.floor(i / assetData.cols) * height, width, height)
+                    textures.push(new Texture(base, rect))
+                }
+                sprite = new PIXI.extras.AnimatedSprite(textures)
+                sprite.animationSpeed = 20 / assetData.delay
+                sprite.play()
+            } else sprite = new Sprite(TextureCache[path.join(this.assetsPath, assetData.location)])
         } else {
             sprite = new Sprite()
-            if (this.status) this.status.log("Unable to load asset \"" + asset.tab + ":" + asset.hash + "\"", 5, 2)
+            if (this.status) this.status.log("Unable to load asset \"" + asset.id + "\"", 5, 2)
         }
         sprite.anchor.set(0.5)
         sprite.x = asset.x
