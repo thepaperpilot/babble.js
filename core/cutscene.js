@@ -11,6 +11,7 @@
  * remove {target} - removes a given puppet from the stage
  * delay {duration} - simply waits, should generally be used as a ";" action
  * move {target} {position} - moves puppet to a new position
+ * facingLeft {target} {facingLeft} - forces puppet direction
  * babble {target} [start/stop/toggle] - makes a puppet start or stop babbling. Default is toggle
  * emote {target} [emote] - makes a puppet switch to a given emote. Default is 'default'
  * jiggle {target} - causes a given puppet to jiggle
@@ -87,6 +88,12 @@ class Cutscene {
                     puppet.container.scale.x = -1
                 }
                 this.actions.delay(callback, { duration: (Math.abs(puppet.target - puppet.position) * this.stage.MOVE_DURATION * 0.6 + this.stage.MOVE_DURATION * 0.4) * 1000 })
+            },
+            facingLeft: function(callback, action) {
+                let puppet = this.stage.getPuppet(action.target)
+                puppet.facingLeft = action.facingLeft !== "false"
+                puppet.container.scale.x = puppet.facingLeft ? -1 : 1
+                callback()
             },
             babble: function(callback, action) {
                 let puppet = this.stage.getPuppet(action.target)
