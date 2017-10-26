@@ -1,11 +1,11 @@
 /**
  * Cutscene Scripts:
- * Each action is a new line, ending with either a comma or a semicolon
- * Commas mean the next action gets immediately run, semicolons tell the cutscene to wait until this action is complete
- * Each line has a command and its parameters, e.g. "move josh 1 5;"
- * Some parameters are optional
+ * Each action is an object with a "command" string for the action to perform, a "wait" boolean for whether or not to
+ * wait until the action is complete before continuing, and any other parameters the command might need (sometimes optional)
+ * e.g. { "action": "move", "target": "protagonist", "position": 2, "wait": true }
  * 
  * Default commands:
+ * run {script} - takes a new script object to be run in parallel with the rest of the cutscene. Only useful with "wait" set to "false"
  * add {name} {id} [position] [facingLeft] [emote] - adds a puppet with the given name at the given position, assigns it the given id for later reference, and optionally overrides initial state
  * set {target} {name} - changes the given puppet (using assigned ids) to a new puppet with the given name
  * remove {target} - removes a given puppet from the stage
@@ -16,7 +16,7 @@
  * jiggle {target} - causes a given puppet to jiggle
  *
  * Actions are defined in the cutscene's "actions" object. You can add functions to that object to add custom actions.
- * The function will be passed a callback function to be called when the action is complete, as well as any parameters passed to the action
+ * The function will be passed a callback function to be called when the action is complete, as well as the action object with all the parameters in it
  * You can use `this` to access references to the stage and actors
  *
  * To start the cutscene, just call cutscene.start()
@@ -27,7 +27,7 @@ class Cutscene {
 
     /**
      * @param {Stage} stage - the stage this puppet will be attached to
-     * @param {string} script - the script for the cutscene
+     * @param {Object[]} script - the script for the cutscene
      * @param {Object} actors - dictionary of actors (e.g. each member is "name": Character)
      * @param {requestCallback} callback - function to be called after cutscene finishes (either successfully or after an error)
      */
@@ -35,74 +35,77 @@ class Cutscene {
         this.stage = stage
         this.actors = actors
 
-        this.start = function() {this.parseNextAction(script.split("\n"), callback)}
+        this.start = function() {this.parseNextAction(script, callback)}
 
         this.actions = {
-            add: function(callback, name, id, position, facingLeft, emote) {
+            run: function(callback, action) {
+                if (action.wait) {
+                    this.parseNextAction(action.script, callback)
+                } else {
+                    this.parseNextAction(action.script, this.empty)
+                    requestAnimationFrame(callback)
+                }
+            },
+            add: function(callback, action) {
                 // Copy our actor from our actors object
-                let actor = JSON.parse(JSON.stringify(this.actors[name]))
+                let actor = JSON.parse(JSON.stringify(this.actors[action.name]))
                 
                 // If optional parameters are set, apply them to our actor
-                if (typeof position !== 'undefined' && position !== null) actor.position = parseInt(position)
-                if (typeof facingLeft !== 'undefined' && facingLeft !== null) actor.facingLeft = facingLeft == "true"
-                if (typeof emote !== 'undefined' && emote !== null) actor.emote = emote
+                if (action.hasOwnProperty('position')) actor.position = action.position
+                if (action.hasOwnProperty('facingLeft')) actor.facingLeft = action.facingLeft
+                if (action.hasOwnProperty('emote')) actor.emote = action.emote
 
                 // Add our actor to the stage
-                this.stage.addPuppet(actor, id)
+                this.stage.addPuppet(actor, action.id)
                 callback()
             },
-            set: function(callback, target, name) {
-                this.stage.setPuppet(target, this.stage.createPuppet(this.actors[name]))
+            set: function(callback, action) {
+                this.stage.setPuppet(action.target, this.stage.createPuppet(this.actors[action.name]))
                 callback()
             },
-            remove: function(callback, target) {
-                this.stage.removePuppet(target)
+            remove: function(callback, action) {
+                this.stage.removePuppet(action.target)
                 callback()
             },
-            delay: function(callback, duration) {
-                if (duration <= 0) requestAnimationFrame(callback)
+            delay: function(callback, action) {
+                if (action.duration <= 0) requestAnimationFrame(callback)
                 else {
-                    let timer = PIXI.timerManager.createTimer(parseInt(duration))
+                    let timer = PIXI.timerManager.createTimer(action.duration)
                     timer.on('end', callback)
                     timer.start()
                 }
             },
-            move: function(callback, target, position) {
-                let puppet = this.stage.getPuppet(target)
-                puppet.target = parseInt(position)
+            move: function(callback, action) {
+                let puppet = this.stage.getPuppet(action.target)
+                puppet.target = action.position
                 puppet.movingAnim = 0
-                if (position > puppet.position) {
+                if (action.position > puppet.position) {
                     puppet.facingLeft = false
                     puppet.container.scale.x = 1
-                } else if (position != puppet.position) {
+                } else if (action.position != puppet.position) {
                     puppet.facingLeft = true
                     puppet.container.scale.x = -1
                 }
-                this.actions.delay(callback, (Math.abs(puppet.target - puppet.position) * this.stage.MOVE_DURATION * 0.6 + this.stage.MOVE_DURATION * 0.4) * 1000)
+                this.actions.delay(callback, { duration: (Math.abs(puppet.target - puppet.position) * this.stage.MOVE_DURATION * 0.6 + this.stage.MOVE_DURATION * 0.4) * 1000 })
             },
-            babble: function(callback, target, action) {
-                let puppet = this.stage.getPuppet(target)
-                let babble = (action || "toggle") === "toggle" ? !puppet.babbling : action === "start"
+            babble: function(callback, action) {
+                let puppet = this.stage.getPuppet(action.target)
+                let babble = (action.action || "toggle") === "toggle" ? !puppet.babbling : action.action === "start"
                 puppet.setBabbling(babble)
                 callback()
             },
-            emote: function(callback, target, emote) {
-                this.stage.getPuppet(target).changeEmote(emote || "default")
+            emote: function(callback, action) {
+                this.stage.getPuppet(action.target).changeEmote(action.emote || "default")
                 callback()
             },
-            jiggle: function(callback, target) {
-                this.stage.getPuppet(target).jiggle()
+            jiggle: function(callback, action) {
+                this.stage.getPuppet(action.target).jiggle()
                 callback()
             }
         }
     }
 
     parseNextAction(script, callback) {
-        // Remove any empty lines from the script
-        while (script.length > 0 && script[0].trim() === "") {
-            script.splice(0, 1)
-        }
-
         // Check if script is complete
         if (script.length === 0) {
             // Cutscene finished successully
@@ -110,57 +113,26 @@ class Cutscene {
             return
         }
 
-        if (script[0].trim().charAt(0) === '(') {
-            for (let i = 0; i < script.length; i++) {
-                if (script[i].trim().length > 1 && script[i].trim().charAt(script[i].trim().length - 2) === ')') {
-                    let eol = script[i].trim().charAt(script[i].trim().length - 1)
-                    script[0] = script[0].trim().substring(1)
-                    script[i] = script[i].trim().substring(0, script[i].trim().length - 2)
-                    let newCallback = function() {
-                        this.parseNextAction(script.slice(i + 1), callback)
-                    }.bind(this)
-                    if (eol === ';') {
-                        this.parseNextAction(script.slice(0, i + 1), newCallback)
-                    } else if (eol === ',') {
-                        this.parseNextAction(script.slice(0, i + 1), this.empty)
-                        requestAnimationFrame(newCallback)
-                    } else break;
-                    return;
-                }
-            }
-        }
-
         // Parse current line of script
-        let eol = script[0].trim().charAt(script[0].trim().length - 1)
-        let action = script[0].trim()
-        action = action.substring(0, action.length - 1)
-        let command = action.split(" ")[0]
-        let parameters = action.split(" ").slice(1)
+        let action = script[0]
 
         // Confirm command exists
-        if (this.actions[command] === null) {
-            // Invalid command
+        if (!this.actions.hasOwnProperty(action.command)) {
+            // Invalid command, end cutscene
             if (callback) requestAnimationFrame(callback)
         }
 
         // Run action
-        switch (eol) {
-            default:
-                // Invalid end of line, stop the cutscene
-                if (callback) requestAnimationFrame(callback)
-                break
-            case ';':
-                // Complete this action before proceeding
-                let newCallback = function() {
-                    this.parseNextAction(script.slice(1), callback)
-                }.bind(this)
-                this.actions[command].call(this, newCallback, ...parameters)
-                break
-            case ',':
-                // Perform this action and immediately continue
-                this.actions[command].call(this, this.empty, ...parameters)
+        if (action.wait) {
+            // Complete this action before proceeding
+            let newCallback = function() {
                 this.parseNextAction(script.slice(1), callback)
-                break
+            }.bind(this)
+            this.actions[action.command].call(this, newCallback, action)
+        } else {
+            // Perform this action and immediately continue
+            this.actions[action.command].call(this, this.empty, action)
+            this.parseNextAction(script.slice(1), callback)
         }
     }
 
