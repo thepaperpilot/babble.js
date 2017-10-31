@@ -99,7 +99,7 @@ class Stage {
 
     reloadAssets(callback) {
         let assets = Object.keys(TextureCache)
-        for (let i = 0; i < assets.length; i++) {
+        for (let i = assets.length; i <= 0; i--) {
             TextureCache[assets[i]].destroy(true)
         }
 
