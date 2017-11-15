@@ -134,9 +134,7 @@ class Stage {
         let callback = function(asset, sprite) {
             let parent = sprite.parent
             let index = parent.getChildIndex(sprite)
-            let newAsset = stage.getAsset(asset)
-            newAsset.layer = asset.layer
-            newAsset.emote = asset.emote
+            let newAsset = stage.getAsset(asset, asset.layer, asset.emote)
             parent.removeChildAt(index)
             parent.addChildAt(newAsset, index)
         }
@@ -157,9 +155,10 @@ class Stage {
     }
 
     resize(e, width, height) {
+        let rect = this.screen.getBoundingClientRect()
         this.bounds = {
-            width: width || this.screen.clientWidth,
-            height: height || this.screen.clientHeight
+            width: width || rect.width,
+            height: height || rect.height
         }
         this.renderer.resize(this.bounds.width, this.bounds.height)
         this.slotWidth = this.bounds.width / this.project.numCharacters
