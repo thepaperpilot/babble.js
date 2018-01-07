@@ -92,7 +92,9 @@ class Stage {
 
     addAsset(id, asset, callback) {
         this.assets[id] = asset
-        TextureCache[path.join(this.assetsPath, asset.location)] = Texture.fromImage(path.join(this.assetsPath, asset.location + "?random=" + new Date()))
+        let date = new Date()
+        TextureCache[path.join(this.assetsPath, asset.location)] = Texture.fromImage(path.join(this.assetsPath, asset.location + "?random=" + date))
+        BaseTextureCache[path.join(this.assetsPath, asset.location)] = BaseTextureCache[path.join(this.assetsPath, asset.location + "?random=" + date)]
         if (callback)
             TextureCache[path.join(this.assetsPath, asset.location)].baseTexture.on('loaded', callback)
     }
