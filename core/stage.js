@@ -221,6 +221,21 @@ class Stage {
         }
     }
 
+    banishPuppets() {
+        for (let i = 0; i < this.puppets.length; i++) {
+            let puppet = this.puppets[i]
+            if (puppet.target > this.project.numCharacters / 2) {
+                puppet.target = this.project.numCharacters + 1
+                puppet.facingLeft = false
+                puppet.container.scale.x = this.project.puppetScale || 1
+            } else {
+                puppet.target = 0
+                puppet.facingLeft = true
+                puppet.container.scale.x = -1 * (this.project.puppetScale || 1)
+            }
+        }
+    }
+
     getPuppet(id) {
         for (let i = 0; i < this.puppets.length; i++)
             if (this.puppets[i].id == id)
