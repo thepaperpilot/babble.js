@@ -60,6 +60,12 @@ class Stage {
         this.renderer.view.style.display = "block";
 
         // Load Assets
+        if (loader.loading) {
+            stage.resize()
+            if (callback) callback(stage)
+            stage.gameLoop()
+            return
+        }
         let texturesToLoad = false
         let keys = Object.keys(assets)
         for (let i = 0; i < keys.length; i++) {
