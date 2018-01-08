@@ -62,7 +62,7 @@ class Stage {
         // Load Assets
         if (loader.loading) {
             stage.resize()
-            if (callback) callback(stage)
+            if (callback) requestAnimationFrame(() => {callback(this)})
             stage.gameLoop()
             return
         }
@@ -78,14 +78,14 @@ class Stage {
         if (texturesToLoad) {
             loader.onComplete.once(function() { 
                 stage.resize()
-                if (callback) callback(stage)
+                if (callback) requestAnimationFrame(() => {callback(stage)})
                 stage.gameLoop()
             })
             loader.load()
         } else {
             loader.load()
             stage.resize()
-            if (callback) callback(stage)
+            if (callback) requestAnimationFrame(() => {callback(stage)})
             stage.gameLoop()
         }
     }
