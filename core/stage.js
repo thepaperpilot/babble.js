@@ -61,9 +61,9 @@ class Stage {
 
         // Load Assets
         if (loader.loading) {
-            stage.resize()
+            this.resize()
             if (callback) requestAnimationFrame(() => {callback(this)})
-            stage.gameLoop()
+            this.gameLoop()
             return
         }
         let texturesToLoad = false
