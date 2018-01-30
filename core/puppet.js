@@ -89,6 +89,7 @@ class Puppet {
         // Place Puppet on Stage
         this.container.interactive = true
         this.container.puppet = puppet
+        this.container.id = id
         this.container.y = stage.screen.clientHeight / stage.puppetStage.scale.y
         this.container.x = (this.position - 0.5) * stage.slotWidth
         this.container.scale.x = this.container.scale.y = (stage.project.puppetScale || 1) 
