@@ -57,11 +57,11 @@ class Cutscene {
                 if (action.hasOwnProperty('emote')) actor.emote = action.emote
 
                 // Add our actor to the stage
-                this.stage.addPuppet(actor, action.id)
+                this.stage.addPuppet(actor, action.id).name = action.name
                 callback()
             },
             set: function(callback, action) {
-                this.stage.setPuppet(action.target, this.stage.createPuppet(this.actors[action.name]))
+                this.stage.setPuppet(action.target, this.stage.createPuppet(this.actors[action.name])).name = action.name
                 callback()
             },
             remove: function(callback, action) {
@@ -69,9 +69,9 @@ class Cutscene {
                 callback()
             },
             delay: function(callback, action) {
-                if (action.duration <= 0) requestAnimationFrame(callback)
+                if (action.delay <= 0) requestAnimationFrame(callback)
                 else {
-                    let timer = PIXI.timerManager.createTimer(action.duration)
+                    let timer = PIXI.timerManager.createTimer(action.delay)
                     timer.on('end', callback)
                     timer.start()
                 }
@@ -87,7 +87,7 @@ class Cutscene {
                     puppet.facingLeft = true
                     puppet.container.scale.x = -1
                 }
-                this.actions.delay(callback, { duration: (Math.abs(puppet.target - puppet.position) * this.stage.MOVE_DURATION * 0.6 + this.stage.MOVE_DURATION * 0.4) * 1000 })
+                this.actions.delay(callback, { delay: (Math.abs(puppet.target - puppet.position) * this.stage.MOVE_DURATION * 0.6 + this.stage.MOVE_DURATION * 0.4) * 1000 })
             },
             facingLeft: function(callback, action) {
                 let puppet = this.stage.getPuppet(action.target)
@@ -124,9 +124,10 @@ class Cutscene {
         let action = script[0]
 
         // Confirm command exists
-        if (!this.actions.hasOwnProperty(action.command)) {
+        if (!action || !this.actions.hasOwnProperty(action.command)) {
             // Invalid command, end cutscene
             if (callback) requestAnimationFrame(callback)
+            return
         }
 
         // Run action

@@ -268,6 +268,8 @@ class Stage {
         this.puppetStage.removeChild(oldPuppet.container)
         this.puppetStage.addChild(newPuppet.container)
         this.resize()
+
+        return newPuppet
     }
 
     getThumbnail() {
