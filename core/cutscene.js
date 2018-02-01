@@ -103,7 +103,7 @@ class Cutscene {
                 if (!this.stage.getPuppet(action.target)) throw new Error("Actor not present on stage!")
                 
                 let puppet = this.stage.getPuppet(action.target)
-                puppet.facingLeft = action.facingLeft !== "false"
+                puppet.facingLeft = action.facingLeft
                 puppet.container.scale.x = puppet.facingLeft ? -1 : 1
                 callback()
             },
