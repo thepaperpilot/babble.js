@@ -48,6 +48,9 @@ class Cutscene {
                 }
             },
             add: function(callback, action) {
+                if (this.stage.getPuppet(action.id)) throw new Error("Puppet already on stage!")
+                if (!(action.name in this.actors)) throw new Error("Could not find puppet with that name!")
+
                 // Copy our actor from our actors object
                 let actor = JSON.parse(JSON.stringify(this.actors[action.name]))
                 
@@ -61,10 +64,15 @@ class Cutscene {
                 callback()
             },
             set: function(callback, action) {
+                if (!this.stage.getPuppet(action.target)) throw new Error("No puppet on stage!")
+                if (!(action.name in this.actors)) throw new Error("Could not find puppet with that name!")
+
                 this.stage.setPuppet(action.target, this.stage.createPuppet(this.actors[action.name])).name = action.name
                 callback()
             },
             remove: function(callback, action) {
+                if (!this.stage.getPuppet(action.target)) throw new Error("No puppet on stage!")
+
                 this.stage.removePuppet(action.target)
                 callback()
             },
@@ -77,6 +85,8 @@ class Cutscene {
                 }
             },
             move: function(callback, action) {
+                if (!this.stage.getPuppet(action.target)) throw new Error("No puppet on stage!")
+                
                 let puppet = this.stage.getPuppet(action.target)
                 puppet.target = action.position
                 puppet.movingAnim = 0
@@ -90,22 +100,30 @@ class Cutscene {
                 this.actions.delay(callback, { delay: (Math.abs(puppet.target - puppet.position) * this.stage.MOVE_DURATION * 0.6 + this.stage.MOVE_DURATION * 0.4) * 1000 })
             },
             facingLeft: function(callback, action) {
+                if (!this.stage.getPuppet(action.target)) throw new Error("No puppet on stage!")
+                
                 let puppet = this.stage.getPuppet(action.target)
                 puppet.facingLeft = action.facingLeft !== "false"
                 puppet.container.scale.x = puppet.facingLeft ? -1 : 1
                 callback()
             },
             babble: function(callback, action) {
+                if (!this.stage.getPuppet(action.target)) throw new Error("No puppet on stage!")
+                
                 let puppet = this.stage.getPuppet(action.target)
                 let babble = (action.action || "toggle") === "toggle" ? !puppet.babbling : action.action === "start"
                 puppet.setBabbling(babble)
                 callback()
             },
             emote: function(callback, action) {
+                if (!this.stage.getPuppet(action.target)) throw new Error("No puppet on stage!")
+                
                 this.stage.getPuppet(action.target).changeEmote(action.emote || "default")
                 callback()
             },
             jiggle: function(callback, action) {
+                if (!this.stage.getPuppet(action.target)) throw new Error("No puppet on stage!")
+                
                 this.stage.getPuppet(action.target).jiggle()
                 callback()
             }
