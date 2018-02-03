@@ -125,7 +125,7 @@ class Cutscene {
                 if (!this.stage.getPuppet(action.target)) throw new Error("Actor not present on stage!")
                 
                 this.stage.getPuppet(action.target).jiggle()
-                this.actions.delay(callback, { delay: this.stage.MOVE_DURATION * 0.4 * 1000 })
+                this.actions.delay(callback, { delay: this.stage.MOVE_DURATION * 0.4 * 1000, parent: action })
             }
         }
     }
