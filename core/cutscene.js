@@ -97,7 +97,7 @@ class Cutscene {
                     puppet.facingLeft = true
                     puppet.container.scale.x = -1
                 }
-                this.actions.delay(callback, { delay: (Math.abs(puppet.target - puppet.position) * this.stage.MOVE_DURATION * 0.6 + this.stage.MOVE_DURATION * 0.4) * 1000 })
+                this.actions.delay(callback, { delay: (Math.abs(puppet.target - puppet.position) * this.stage.MOVE_DURATION * 0.6 + this.stage.MOVE_DURATION * 0.4) * 1000, parent: action })
             },
             facingLeft: function(callback, action) {
                 if (!this.stage.getPuppet(action.target)) throw new Error("Actor not present on stage!")
