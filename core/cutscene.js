@@ -88,6 +88,11 @@ class Cutscene {
                 if (!this.stage.getPuppet(action.target)) throw new Error("Actor not present on stage!")
                 
                 let puppet = this.stage.getPuppet(action.target)
+                if (puppet.target == puppet.position && puppet.position == action.position) {
+                    callback()
+                    return
+                }
+                
                 puppet.target = action.position
                 puppet.movingAnim = 0
                 if (action.position > puppet.position) {
