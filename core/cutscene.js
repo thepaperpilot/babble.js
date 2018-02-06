@@ -97,10 +97,10 @@ class Cutscene {
                 puppet.movingAnim = 0
                 if (action.position > puppet.position) {
                     puppet.facingLeft = false
-                    puppet.container.scale.x = 1
+                    puppet.container.scale.x = this.stage.project.puppetScale
                 } else if (action.position != puppet.position) {
                     puppet.facingLeft = true
-                    puppet.container.scale.x = -1
+                    puppet.container.scale.x = -this.stage.project.puppetScale
                 }
                 this.actions.delay(callback, { delay: (Math.abs(puppet.target - puppet.position) * this.stage.MOVE_DURATION * 0.6 + this.stage.MOVE_DURATION * 0.4) * 1000, parent: action })
             },
@@ -109,7 +109,7 @@ class Cutscene {
                 
                 let puppet = this.stage.getPuppet(action.target)
                 puppet.facingLeft = action.facingLeft
-                puppet.container.scale.x = puppet.facingLeft ? -1 : 1
+                puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * this.stage.project.puppetScale
                 callback()
             },
             babble: function(callback, action) {
