@@ -335,7 +335,8 @@ class Stage {
             // But frankly it's difficult to tell
             if (puppet.target != puppet.position || puppet.movingAnim !== 0) {
                 // Whether its going left or right
-                let direction = puppet.target > puppet.position ? 1 : -1
+                if (puppet.direction === 0 && puppet.target != puppet.position)
+                    puppet.direction = puppet.target > puppet.position ? 1 : -1
                 // Update how far into the animation we are
                 puppet.movingAnim += delta / (1000 * MOVE_DURATION)
 
@@ -344,11 +345,13 @@ class Stage {
                 //  and the rest (.6 - 1) only plays at the destination slot
                 if (puppet.movingAnim >= 0.6 && puppet.movingAnim - delta / (1000 * MOVE_DURATION) < 0.6) {
                     // Once we pass .6, update our new slot position
-                    puppet.position += direction
+                    puppet.position += puppet.direction
+                    puppet.direction = 0
                     // If we're not at the final slot yet, reset the animation
                     if (puppet.position != puppet.target) puppet.movingAnim = 0
-
+                    else puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.project.puppetScale || 1)
                 } else if (puppet.movingAnim >= 1) puppet.movingAnim = 0
+                else if (puppet.movingAnim < 0.6) puppet.container.scale.x = puppet.direction * (this.project.puppetScale || 1)
 
                 // Scale in a sin formation such that it does 3 half circles per slot, plus 2 more at the end
                 puppet.container.scale.y = (1 + Math.sin((1 + puppet.movingAnim * 5) * Math.PI) / 40) * (this.project.puppetScale || 1) 
@@ -359,16 +362,15 @@ class Stage {
                 let pos = puppet.position % (this.project.numCharacters + 1)
                 if (pos < 0) pos += this.project.numCharacters + 1
                 let start = pos == 0 ?
-                    direction === 1 ? - Math.abs(puppet.container.width) :                               // Starting on left edge of screen
+                    puppet.direction === 1 ? - Math.abs(puppet.container.width) :                               // Starting on left edge of screen
                         this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) : // Starting on right edge of screen
                     (pos - 0.5) * this.slotWidth                                                         // Ending on screen
-                pos += direction
+                pos += puppet.direction
                 if (pos < 0) pos += this.project.numCharacters + 1
                 let end = pos <= 0 ? - Math.abs(puppet.container.width) :                                  // Starting left of screen
                     pos >= this.project.numCharacters + 1 ? 
                     this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) : // Starting right of screen
                     (pos - 0.5) * this.slotWidth                                                        // Ending on screen
-                console.log(puppet.position, pos - direction, direction, start, end)
                 puppet.container.x = interpolation === 1 ? start : start + (end - start) * interpolation
             }
             if (puppet.babbling) {

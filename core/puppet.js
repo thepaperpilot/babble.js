@@ -31,6 +31,7 @@ class Puppet {
         this.deadbonesTargetRotation = this.deadbonesStartRotation = 0
         this.eyeBabbleDuration = puppet.eyeBabbleDuration || 2000
         this.mouthBabbleDuration = puppet.mouthBabbleDuration || 270
+        this.direction = 0
 
         // Construct Puppet
         this.body = new Container()
@@ -109,32 +110,6 @@ class Puppet {
         } else {
             this.emotes['0'].mouth.visible = true
             this.emotes['0'].eyes.visible = true
-        }
-    }
-
-    // TODO replace these with a `move(amount)` function, that accepts negative values
-
-    moveLeft() {
-        if (this.target > this.position) return
-        if (this.facingLeft || this.position === 0 || this.position == this.stage.project.numCharacters + 1) {
-            this.target--
-            this.facingLeft = true
-            this.container.scale.x = -1 * (this.stage.project.puppetScale || 1)
-        } else {
-            this.facingLeft = true
-            this.container.scale.x = -1 * (this.stage.project.puppetScale || 1)
-        }
-    }
-
-    moveRight() {
-        if (this.target < this.position) return
-        if (!this.facingLeft || this.position === 0 || this.position == this.stage.project.numCharacters + 1) {
-            this.target++
-            this.facingLeft = false
-            this.container.scale.x = 1 * (this.stage.project.puppetScale || 1)
-        } else {
-            this.facingLeft = false
-            this.container.scale.x = 1 * (this.stage.project.puppetScale || 1)
         }
     }
 
