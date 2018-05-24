@@ -177,17 +177,15 @@ class Stage {
         } else this.puppetStage.scale.x = this.puppetStage.scale.y = 1
         for (let i = 0; i < this.puppets.length; i++) {
             let puppet = this.puppets[i]
-            if (puppet.position > this.project.numCharacters + 1 || puppet.target > this.project.numCharacters + 1) {
-                puppet.position = puppet.target = this.project.numCharacters + 1
-                puppet.movingAnim = 0
-            }
             puppet.container.scale.x = puppet.container.scale.y = (this.project.puppetScale || 1) 
             puppet.container.scale.x *= puppet.facingLeft ? -1 : 1
             puppet.container.y = this.bounds.height / this.puppetStage.scale.y
-            puppet.container.x = puppet.position <= 0 ? - Math.abs(puppet.container.width) :                       // Starting left of screen
-                                 puppet.position >= this.project.numCharacters + 1 ? 
-                                 this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) :  // Starting right of screen
-                                 (puppet.position - 0.5) * this.slotWidth                                          // Starting on screen
+            let pos = puppet.position % (this.project.numCharacters + 1)
+            if (pos < 0) pos += this.project.numCharacters + 1
+            puppet.container.x = pos == 0 ? - Math.abs(puppet.container.width) :                                    // Starting left of screen
+                                 pos == this.project.numCharacters + 1 ? 
+                                 this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) :   // Starting right of screen
+                                 (pos - 0.5) * this.slotWidth                                                       // Starting on screen
         }
     }
 
@@ -202,10 +200,12 @@ class Stage {
         for (let i = 0; i < this.listeners.length; i++)
             newPuppet.container.on(this.listeners[i].event, this.listeners[i].callback)
         newPuppet.container.y = this.bounds.height / this.puppetStage.scale.y
-        newPuppet.container.x = newPuppet.position <= 0 ? - Math.abs(newPuppet.container.width) :                    // Starting left of screen
-                                newPuppet.position >= this.project.numCharacters + 1 ? 
-                                this.project.numCharacters * this.slotWidth + Math.abs(newPuppet.container.width) :  // Starting right of screen
-                                (newPuppet.position - 0.5) * this.slotWidth                                          // Starting on screen
+        let pos = newPuppet.position % (this.project.numCharacters + 1)
+        if (pos < 0) pos += this.project.numCharacters + 1
+        newPuppet.container.x = pos == 0 ? - Math.abs(newPuppet.container.width) :                                  // Starting left of screen
+                             pos == this.project.numCharacters + 1 ? 
+                             this.project.numCharacters * this.slotWidth + Math.abs(newPuppet.container.width) :    // Starting right of screen
+                             (pos - 0.5) * this.slotWidth                                                           // Starting on screen
         return newPuppet
     }
 
@@ -262,7 +262,9 @@ class Stage {
         for (let i = 0; i < this.listeners.length; i++)
             newPuppet.container.on(this.listeners[i].event, this.listeners[i].callback)
         newPuppet.container.y = this.bounds.height / this.puppetStage.scale.y
-        newPuppet.container.x = (newPuppet.position - 0.5) * this.slotWidth
+        let pos = newPuppet.position % (this.project.numCharacters + 1)
+        if (pos < 0) pos += this.project.numCharacters + 1
+        newPuppet.container.x = (pos - 0.5) * this.slotWidth
 
         this.puppets[this.puppets.indexOf(oldPuppet)] = newPuppet
         this.puppetStage.removeChild(oldPuppet.container)
@@ -354,27 +356,20 @@ class Stage {
                 puppet.container.y = this.bounds.height / this.puppetStage.scale.y
                 // Linearly move across the slot, unless we're in the (.6 - 1) part of the animation, and ensure we're off screen even when the puppets are large
                 let interpolation = Math.min(1, puppet.movingAnim / 0.6)
-                let start = puppet.position <= 0 ? - Math.abs(puppet.container.width) :                       // Starting left of screen
-                            puppet.position >= this.project.numCharacters + 1 ? 
-                            this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) :  // Starting right of screen
-                            (puppet.position - 0.5) * this.slotWidth                                          // Starting on screen
-                let end = puppet.position + direction <= 0 ? - Math.abs(puppet.container.width) :             // Ending left of screen
-                          puppet.position + direction >= this.project.numCharacters + 1 ?
-                          this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) :    // Ending right of screen
-                          (puppet.position + direction - 0.5) * this.slotWidth                                // Ending on screen
-                puppet.container.x = interpolation === 1 ? start : start + (end - start) * interpolation;
-
-                // Wrap Edges
-                if (puppet.target > this.project.numCharacters + 1 && puppet.position >= this.project.numCharacters + 1 && puppet.movingAnim > 0) {
-                    puppet.container.x -= (this.project.numCharacters) * this.slotWidth + Math.abs(puppet.container.width) * 2
-                    puppet.position = 0
-                    puppet.target -= this.project.numCharacters + 1
-                }
-                if (puppet.target < 0 && puppet.position <= 0 && puppet.movingAnim > 0) {
-                    puppet.container.x += (this.project.numCharacters + 1) * this.slotWidth + Math.abs(puppet.container.width) * 2
-                    puppet.position = this.project.numCharacters + 1
-                    puppet.target += this.project.numCharacters + 1
-                }
+                let pos = puppet.position % (this.project.numCharacters + 1)
+                if (pos < 0) pos += this.project.numCharacters + 1
+                let start = pos == 0 ?
+                    direction === 1 ? - Math.abs(puppet.container.width) :                               // Starting on left edge of screen
+                        this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) : // Starting on right edge of screen
+                    (pos - 0.5) * this.slotWidth                                                         // Ending on screen
+                pos += direction
+                if (pos < 0) pos += this.project.numCharacters + 1
+                let end = pos <= 0 ? - Math.abs(puppet.container.width) :                                  // Starting left of screen
+                    pos >= this.project.numCharacters + 1 ? 
+                    this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) : // Starting right of screen
+                    (pos - 0.5) * this.slotWidth                                                        // Ending on screen
+                console.log(puppet.position, pos - direction, direction, start, end)
+                puppet.container.x = interpolation === 1 ? start : start + (end - start) * interpolation
             }
             if (puppet.babbling) {
                 // Update how long each face part has been on display
