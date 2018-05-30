@@ -257,6 +257,7 @@ class Stage {
         newPuppet.position = oldPuppet.position
         newPuppet.target = oldPuppet.target
         newPuppet.facingLeft = oldPuppet.facingLeft
+        newPuppet.babbling = oldPuppet.babbling
         newPuppet.container.scale.x = (newPuppet.facingLeft ? -1 : 1) * (this.project.puppetScale || 1) 
 
         for (let i = 0; i < this.listeners.length; i++)
