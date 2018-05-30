@@ -167,6 +167,70 @@ class Puppet {
                     callback(character.emotes[emotes[j]].mouth[k], this.emotes[emotes[j]].mouth.children[k], "mouth", emotes[j])
         }
     }
+
+    update(updateBabble = true) {
+        // Update position
+        this.container.scale.x = this.container.scale.y = (this.stage.project.puppetScale || 1) 
+        this.container.scale.x *= this.facingLeft ? -1 : 1
+        this.container.y = this.stage.bounds.height / this.stage.puppetStage.scale.y
+        this.container.x = this.position <= 0 ? - Math.abs(this.container.width) / 2 :                                      // Starting left of screen
+                           this.position >= this.stage.project.numCharacters + 1 ? 
+                           this.stage.project.numCharacters * this.stage.slotWidth + Math.abs(this.container.width) / 2 :   // Starting right of screen
+                           (this.position - 0.5) * this.stage.slotWidth                                                     // Starting on screen
+
+        // Update emote
+        let emotes = Object.keys(this.emotes)
+        for (let i = 0; i < emotes.length; i++) {
+            this.emotes[emotes[i]].mouth.visible = false
+            this.emotes[emotes[i]].eyes.visible = false
+        }
+        if (this.emote && this.emotes[this.emote].enabled) {
+            this.emotes[this.emote].mouth.visible = true
+            this.emotes[this.emote].eyes.visible = true
+        } else {
+            this.emotes['0'].mouth.visible = true
+            this.emotes['0'].eyes.visible = true
+        }
+
+        // Update babble
+        if (updateBabble) {
+            if (this.deadbonesStyle) {
+                this.deadbonesAnim = 0
+                this.deadbonesDuration = 100 + Math.random() * 200
+                this.deadbonesStartY = this.head.y = Math.random() * - 20 - this.headBase.height / 2
+                this.deadbonesStartRotation = this.head.rotation = 0.1 - Math.random() * 0.2
+                this.deadbonesTargetY = Math.random() * - 20 - this.headBase.height / 2
+                this.deadbonesTargetRotation = 0.1 - Math.random() * 0.2
+            } else {
+                this.updateEyeBabble()
+                this.updateMouthBabble()
+            }
+        }
+    }
+
+    updateEyeBabble() {
+        if (this.emotes[this.emote]) this.emotes[this.emote].eyes.visible = false
+        this.emotes['0'].eyes.visible = false
+        for (let j = 0; j < this.eyes.length; j++) {
+            if (this.emotes[this.eyes[j]]) this.emotes[this.eyes[j]].eyes.visible = false
+        }
+        let eyes = this.eyes[Math.floor(Math.random() * this.eyes.length)]
+        this.emotes[this.emotes[eyes] ? eyes : '0'].eyes.visible = true
+        this.eyesAnim = 0
+        this.eyesDuration = (0.1 + Math.random()) * this.eyeBabbleDuration
+    }
+
+    updateMouthBabble() {
+        if (this.emotes[this.emote]) this.emotes[this.emote].mouth.visible = false
+        this.emotes['0'].mouth.visible = false
+        for (let j = 0; j < this.mouths.length; j++) {
+            if (this.emotes[this.mouths[j]]) this.emotes[this.mouths[j]].mouth.visible = false
+        }
+        let mouth = this.mouths[Math.floor(Math.random() * this.mouths.length)]
+        this.emotes[this.emotes[mouth] ? mouth : '0'].mouth.visible = true
+        this.mouthAnim = 0
+        this.mouthDuration = (0.1 + Math.random()) * this.mouthBabbleDuration
+    }
 }
 
 module.exports = Puppet
