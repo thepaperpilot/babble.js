@@ -253,12 +253,12 @@ class Stage {
     setPuppet(id, newPuppet) {
         let oldPuppet = this.getPuppet(id)
         newPuppet.changeEmote(oldPuppet.emote)
-        newPuppet.id = oldPuppet.id
+        newPuppet.id = newPuppet.container.id = oldPuppet.id
         newPuppet.position = oldPuppet.position
         newPuppet.target = oldPuppet.target
         newPuppet.facingLeft = oldPuppet.facingLeft
         newPuppet.babbling = oldPuppet.babbling
-        newPuppet.container.scale.x = (newPuppet.facingLeft ? -1 : 1) * (this.project.puppetScale || 1) 
+        newPuppet.container.scale.x = (newPuppet.facingLeft ? -1 : 1) * (this.project.puppetScale || 1)
 
         for (let i = 0; i < this.listeners.length; i++)
             newPuppet.container.on(this.listeners[i].event, this.listeners[i].callback)
