@@ -123,7 +123,7 @@ class Cutscene {
             emote: function(callback, action) {
                 if (!this.stage.getPuppet(action.target)) throw new Error("Actor not present on stage!")
                 
-                this.stage.getPuppet(action.target).changeEmote(action.emote || "default")
+                this.stage.getPuppet(action.target).changeEmote(action.emote || "0")
                 callback()
             },
             jiggle: function(callback, action) {
