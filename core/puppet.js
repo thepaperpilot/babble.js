@@ -104,7 +104,7 @@ class Puppet {
             this.emotes[emotes[i]].mouth.visible = false
             this.emotes[emotes[i]].eyes.visible = false
         }
-        if (emote && this.emotes[emote].enabled) {
+        if (this.emotes[emote] && this.emotes[emote].enabled) {
             this.emotes[emote].mouth.visible = true
             this.emotes[emote].eyes.visible = true
         } else {
@@ -184,7 +184,7 @@ class Puppet {
             this.emotes[emotes[i]].mouth.visible = false
             this.emotes[emotes[i]].eyes.visible = false
         }
-        if (this.emote && this.emotes[this.emote].enabled) {
+        if (this.emotes[this.emote] && this.emotes[this.emote].enabled) {
             this.emotes[this.emote].mouth.visible = true
             this.emotes[this.emote].eyes.visible = true
         } else {
