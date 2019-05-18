@@ -51,7 +51,7 @@ class Stage {
         this.screen = document.getElementById(element)
         this.screen.appendChild(this.renderer.view)
         
-        this.lastFrame = new Date()
+        this.lastFrame = Date.now()
         this.puppets = []
         this.listeners = []
 
@@ -67,13 +67,12 @@ class Stage {
             return
         }
         let texturesToLoad = false
-        let keys = Object.keys(assets)
-        for (let i = 0; i < keys.length; i++) {
-            if (!TextureCache[path.join(assetsPath, assets[keys[i]].location)]) {
-                loader.add(path.join(assetsPath, assets[keys[i]].location))
+        Object.values(assets).forEach(asset => {
+            if (!TextureCache[path.join(assetsPath, asset.location)]) {
+                loader.add(path.join(assetsPath, asset.location))
                 texturesToLoad = true
             }
-        }
+        })
         let stage = this
         if (texturesToLoad) {
             loader.onComplete.once(function() { 
@@ -92,41 +91,32 @@ class Stage {
 
     registerPuppetListener(event, callback) {
         this.listeners.push({"event": event, "callback": callback})
-        for (let i = 0; i < this.puppets.length; i++)
-            this.puppets[i].container.on(event, callback)
+        this.puppets.forEach(p => p.container.on(event, callback))
     }
 
     addAsset(id, asset, callback) {
         this.assets[id] = asset
-        let date = new Date()
-        TextureCache[path.join(this.assetsPath, asset.location)] = Texture.fromImage(path.join(this.assetsPath, asset.location + "?random=" + date))
-        BaseTextureCache[path.join(this.assetsPath, asset.location)] = BaseTextureCache[path.join(this.assetsPath, asset.location + "?random=" + date)]
+        let date = Date.now()
+        TextureCache[path.join(this.assetsPath, asset.location)] =
+            Texture.fromImage(path.join(this.assetsPath, asset.location + "?random=" + date))
+        BaseTextureCache[path.join(this.assetsPath, asset.location)] =
+            BaseTextureCache[path.join(this.assetsPath, asset.location + "?random=" + date)]
         if (callback)
             TextureCache[path.join(this.assetsPath, asset.location)].baseTexture.on('loaded', callback)
     }
 
     reloadAssets(callback) {
-        let assets = Object.keys(TextureCache)
-        for (let i = assets.length - 1; i >= 0; i--) {
-            if (TextureCache[assets[i]])
-                TextureCache[assets[i]].destroy(true)
-        }
+        Object.keys(TextureCache).forEach(k => {if (TextureCache[k]) TextureCache[k].destroy(true)})
 
         // Load Assets
-        let keys = Object.keys(this.assets)
-        for (let i = 0; i < keys.length; i++) {
-            if (!TextureCache[path.join(this.assetsPath, this.assets[keys[i]].location)]) {
-                TextureCache[path.join(this.assetsPath, this.assets[keys[i]].location)] = Texture.fromImage(path.join(this.assetsPath, this.assets[keys[i]].location))
-            }
-        }
+        Object.values(this.assets).forEach(a => {
+            if (!TextureCache[path.join(this.assetsPath, a.location)])
+                TextureCache[path.join(this.assetsPath, a.location)] =
+                    Texture.fromImage(path.join(this.assetsPath, a.location))
+        })
         let stage = this
         let onLoad = () => {
-            let done = true
-            let assets = Object.keys(BaseTextureCache)
-            for (let i = 0; i < assets.length; i++)
-                if (BaseTextureCache[assets[i]].isLoading)
-                    done = false
-            if (done) {
+            if (!Object.values(BaseTextureCache).some(a => a.isLoading)) {
                 callback(stage)
                 ticker.shared.remove(onLoad)
             }
@@ -147,14 +137,11 @@ class Stage {
             parent.removeChildAt(index)
             parent.addChildAt(newAsset, index)
         }
-        for (let i = 0; i < this.puppets.length; i++) {
-            this.puppets[i].applyToAsset(id, callback)
-        }
+        this.puppets.forEach(p => p.applyToAsset(id, callback))
     }
 
     reloadPuppets() {
-        for (let i = 0; i < this.puppets.length; i++)
-            this.setPuppet(this.puppets[i].id, this.createPuppet(this.puppets[i].container.puppet))
+        this.puppets.forEach(p => this.setPuppet(p.id, this.createPuppet(p.puppet)))
     }
 
     reattach(element) {
@@ -169,24 +156,16 @@ class Stage {
             width: width || rect.width,
             height: height || rect.height
         }
-        this.renderer.resize(this.bounds.width, this.bounds.height)
+        if (this.bounds.width !== this.renderer.screen.width ||
+            this.bounds.height !== this.renderer.screen.height)
+            this.renderer.resize(this.bounds.width, this.bounds.height)
         this.slotWidth = this.bounds.width / this.project.numCharacters
         if (this.slotWidth < 400) {
             this.puppetStage.scale.x = this.puppetStage.scale.y = this.slotWidth / 400
             this.slotWidth = 400
         } else this.puppetStage.scale.x = this.puppetStage.scale.y = 1
-        for (let i = 0; i < this.puppets.length; i++) {
-            let puppet = this.puppets[i]
-            puppet.container.scale.x = puppet.container.scale.y = (this.project.puppetScale || 1) 
-            puppet.container.scale.x *= puppet.facingLeft ? -1 : 1
-            puppet.container.y = this.bounds.height / this.puppetStage.scale.y
-            let pos = puppet.position % (this.project.numCharacters + 1)
-            if (pos < 0) pos += this.project.numCharacters + 1
-            puppet.container.x = pos == 0 ? - Math.abs(puppet.container.width) :                                    // Starting left of screen
-                                 pos == this.project.numCharacters + 1 ? 
-                                 this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) :   // Starting right of screen
-                                 (pos - 0.5) * this.slotWidth                                                       // Starting on screen
-        }
+
+        this.puppets.forEach(p => p.updatePosition())
     }
 
     createPuppet(puppet) {
@@ -197,25 +176,13 @@ class Stage {
         let newPuppet = new Puppet(this, puppet, id)
         this.puppets.push(newPuppet)
         this.puppetStage.addChild(newPuppet.container)
-        for (let i = 0; i < this.listeners.length; i++)
-            newPuppet.container.on(this.listeners[i].event, this.listeners[i].callback)
-        newPuppet.container.y = this.bounds.height / this.puppetStage.scale.y
-        let pos = newPuppet.position % (this.project.numCharacters + 1)
-        if (pos < 0) pos += this.project.numCharacters + 1
-        newPuppet.container.x = pos == 0 ? - Math.abs(newPuppet.container.width) :                                  // Starting left of screen
-                             pos == this.project.numCharacters + 1 ? 
-                             this.project.numCharacters * this.slotWidth + Math.abs(newPuppet.container.width) :    // Starting right of screen
-                             (pos - 0.5) * this.slotWidth                                                           // Starting on screen
+        this.listeners.forEach(l => newPuppet.container.on(l.event, l.callback))
+        newPuppet.updatePosition()
         return newPuppet
     }
 
     removePuppet(id) {
-        let puppet
-        for (let i = 0; i < this.puppets.length; i++)
-            if (this.puppets[i].id == id) {
-                puppet = this.puppets[i]
-                break
-            }
+        const puppet = this.puppets.find(p => p.id == id)
         if (puppet) {
             this.puppets.splice(this.puppets.indexOf(puppet), 1)
             this.puppetStage.removeChild(puppet.container)
@@ -230,8 +197,7 @@ class Stage {
     }
 
     banishPuppets() {
-        for (let i = 0; i < this.puppets.length; i++) {
-            let puppet = this.puppets[i]
+        this.puppets.forEach(puppet => {
             if (puppet.target > this.project.numCharacters / 2) {
                 puppet.target = this.project.numCharacters + 1
                 puppet.facingLeft = false
@@ -241,13 +207,11 @@ class Stage {
                 puppet.facingLeft = true
                 puppet.container.scale.x = -1 * (this.project.puppetScale || 1)
             }
-        }
+        })
     }
 
     getPuppet(id) {
-        for (let i = 0; i < this.puppets.length; i++)
-            if (this.puppets[i].id == id)
-                return this.puppets[i]
+        return this.puppets.find(p => p.id == id)
     }
 
     setPuppet(id, newPuppet) {
@@ -258,14 +222,7 @@ class Stage {
         newPuppet.target = oldPuppet.target
         newPuppet.facingLeft = oldPuppet.facingLeft
         newPuppet.babbling = oldPuppet.babbling
-        newPuppet.container.scale.x = (newPuppet.facingLeft ? -1 : 1) * (this.project.puppetScale || 1)
-
-        for (let i = 0; i < this.listeners.length; i++)
-            newPuppet.container.on(this.listeners[i].event, this.listeners[i].callback)
-        newPuppet.container.y = this.bounds.height / this.puppetStage.scale.y
-        let pos = newPuppet.position % (this.project.numCharacters + 1)
-        if (pos < 0) pos += this.project.numCharacters + 1
-        newPuppet.container.x = (pos - 0.5) * this.slotWidth
+        this.listeners.forEach(l => newPuppet.container.on(l.event, l.callback))
 
         this.puppets[this.puppets.indexOf(oldPuppet)] = newPuppet
         this.puppetStage.removeChild(oldPuppet.container)
@@ -278,7 +235,7 @@ class Stage {
     getThumbnail() {
         this.renderer.render(this.stage)
         try {
-            return trim(this.renderer.plugins.extract.canvas(this.stage)).canvas.toDataURL().replace(/^data:image\/\w+;base64,/, "")
+            return trim(this.renderer.view).canvas.toDataURL().replace(/^data:image\/\w+;base64,/, "")
         } catch(e) {
             this.status.error("Failed to generate thumbnail", e)
             return null
@@ -286,7 +243,7 @@ class Stage {
     }
 
     gameLoop() {
-        let thisFrame = new Date()
+        let thisFrame = Date.now()
         let delta = thisFrame - this.lastFrame
         this.lastFrame = thisFrame
 
@@ -294,7 +251,7 @@ class Stage {
         if (this.enabled) this.update(delta)
     }
 
-    getAsset(asset, layer, emote) {
+    getAsset(container, asset) {
         let sprite
         if (this.assets[asset.id]) {
             let assetData = this.assets[asset.id]
@@ -316,21 +273,18 @@ class Stage {
             sprite = new Sprite()
             if (this.status) this.status.log("Unable to load asset \"" + asset.id + "\"", 5, 2)
         }
-        sprite.anchor.set(0.5)
-        sprite.x = asset.x
-        sprite.y = asset.y
-        sprite.rotation = asset.rotation
-        sprite.scale.x = asset.scaleX
-        sprite.scale.y = asset.scaleY
-        sprite.asset = asset
-        sprite.layer = layer
-        sprite.emote = emote
-        return sprite
+        sprite.scale.set(asset.scaleX, asset.scaleY)
+        sprite.anchor.set(.5, .5)
+        container.addChild(sprite)
+        container.x = asset.x
+        container.y = asset.y
+        container.rotation = asset.rotation
+        container.asset = asset
+        return container
     }
 
     update(delta) {
-        for (let i = 0; i < this.puppets.length; i++) {
-            let puppet = this.puppets[i]
+        this.puppets.forEach(puppet => {
             // Movement animations
             // I've tried to emulate what puppet pals does as closely as possible
             // But frankly it's difficult to tell
@@ -363,15 +317,15 @@ class Stage {
                 let pos = puppet.position % (this.project.numCharacters + 1)
                 if (pos < 0) pos += this.project.numCharacters + 1
                 let start = pos == 0 ?
-                    puppet.direction === 1 ? - Math.abs(puppet.container.width) :                               // Starting on left edge of screen
+                    puppet.direction === 1 ? - Math.abs(puppet.container.width) :                        // Starting on left edge of screen
                         this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) : // Starting on right edge of screen
                     (pos - 0.5) * this.slotWidth                                                         // Ending on screen
                 pos += puppet.direction
                 if (pos < 0) pos += this.project.numCharacters + 1
-                let end = pos <= 0 ? - Math.abs(puppet.container.width) :                                  // Starting left of screen
+                let end = pos <= 0 ? - Math.abs(puppet.container.width) :                            // Starting left of screen
                     pos >= this.project.numCharacters + 1 ? 
                     this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) : // Starting right of screen
-                    (pos - 0.5) * this.slotWidth                                                        // Ending on screen
+                    (pos - 0.5) * this.slotWidth                                                     // Ending on screen
                 puppet.container.x = interpolation === 1 ? start : start + (end - start) * interpolation
             }
             if (puppet.babbling) {
@@ -380,12 +334,12 @@ class Stage {
                 puppet.mouthAnim += delta
 
                 // Update eyes
-                if (puppet.eyesAnim >= puppet.eyesDuration && puppet.eyes.length && (puppet.emote === '0' || !puppet.emotes[puppet.emote])) {
+                if (puppet.eyesAnim >= puppet.eyesDuration && (puppet.emote === '0' || !puppet.emotes[puppet.emote])) {
                     puppet.updateEyeBabble()
                 }
 
                 // Update mouth
-                if (puppet.mouthAnim >= puppet.mouthDuration && puppet.mouths.length) {
+                if (puppet.mouthAnim >= puppet.mouthDuration) {
                     puppet.updateMouthBabble()
                 }
             }
@@ -399,22 +353,30 @@ class Stage {
                     puppet.deadbonesAnim = 0
                     if (puppet.babbling) {
                         puppet.deadbonesDuration = 100 + Math.random() * 200
-                        puppet.deadbonesStartY = puppet.head.y = puppet.deadbonesTargetY
-                        puppet.deadbonesStartRotation = puppet.head.rotation = puppet.deadbonesTargetRotation
-                        puppet.deadbonesTargetY = Math.random() * - 20 - puppet.headBase.height / 2
+                        puppet.deadbonesStartY = puppet.deadbonesTargetY
+                        puppet.deadbonesStartRotation = puppet.deadbonesTargetRotation
+                        puppet.head.forEach(a => {
+                            a.y = a.asset.y + puppet.deadbonesStartY
+                            a.rotation = a.asset.rotation + puppet.deadbonesStartRotation
+                        })
+                        puppet.deadbonesTargetY = 10 - Math.random() * 20
                         puppet.deadbonesTargetRotation = 0.1 - Math.random() * 0.2
                     } else {
                         puppet.deadbonesDuration = 0
-                        puppet.head.y = puppet.deadbonesTargetY
-                        puppet.head.rotation = puppet.deadbonesTargetRotation
+                        puppet.head.forEach(a => {
+                            a.y = a.asset.y + puppet.deadbonesTargetY
+                            a.rotation = a.asset.rotation + puppet.deadbonesTargetRotation
+                        })
                     }
                 } else {
                     let percent = (puppet.deadbonesAnim / puppet.deadbonesDuration) * (puppet.deadbonesAnim / puppet.deadbonesDuration)
-                    puppet.head.y = puppet.deadbonesStartY + (puppet.deadbonesTargetY - puppet.deadbonesStartY) * percent
-                    puppet.head.rotation = puppet.deadbonesStartRotation + (puppet.deadbonesTargetRotation - puppet.deadbonesStartRotation) * percent
+                    puppet.head.forEach(a => {
+                        a.y = a.asset.y + puppet.deadbonesStartY + (puppet.deadbonesTargetY - puppet.deadbonesStartY) * percent
+                        a.rotation = a.asset.rotation + puppet.deadbonesStartRotation + (puppet.deadbonesTargetRotation - puppet.deadbonesStartRotation) * percent
+                    })
                 }
             }
-        }
+        })
         this.renderer.render(this.stage)
         PIXI.timerManager.update(delta / 1000)
     }

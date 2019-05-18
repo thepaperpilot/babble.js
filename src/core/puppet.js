@@ -17,13 +17,12 @@ class Puppet {
     constructor(stage, puppet, id) {
         // Init Variables
         this.babbling = false
+        this.puppet = puppet
         this.stage = stage
         this.id = id
         this.container = new Container()
         this.position = this.target = puppet.position
         this.facingLeft = puppet.facingLeft
-        this.eyes = puppet.eyes
-        this.mouths = puppet.mouths
         this.deadbonesStyle = puppet.deadbonesStyle
         this.movingAnim = this.eyesAnim = this.mouthAnim = this.deadbonesAnim = 0
         this.eyesDuration = this.mouthDuration = this.deadbonesDuration = 0
@@ -32,85 +31,70 @@ class Puppet {
         this.eyeBabbleDuration = puppet.eyeBabbleDuration || 2000
         this.mouthBabbleDuration = puppet.mouthBabbleDuration || 270
         this.direction = 0
+        this.head = []
+        this.emotes = { 0: { base: [], eyes: [], mouth: [] } }
 
         // Construct Puppet
-        this.body = new Container()
-        for (let i = 0; i < puppet.body.length; i++) {
-            this.body.addChild(stage.getAsset(puppet.body[i], 'body'))
-        }
-        this.container.addChild(this.body)
-
-        this.head = new Container()
-        this.headBase = new Container()
-        for (let i = 0; i < puppet.head.length; i++) {
-            this.headBase.addChild(stage.getAsset(puppet.head[i], 'headBase'))
-        }
-        this.head.addChild(this.headBase)
-        this.emotes = {}
-        this.mouthsContainer = new Container()
-        this.eyesContainer = new Container()
-        for (let i = 0; i < puppet.emotes.length; i++) {
-            let emote = puppet.emotes[i]
-            this.emotes[i] = {
-                "mouth": new Container(),
-                "eyes": new Container(),
-                enabled: emote.enabled,
-                name: emote.name
-            }
-            this.mouthsContainer.addChild(this.emotes[i].mouth)
-            this.eyesContainer.addChild(this.emotes[i].eyes)
-            for (let j = 0; j < puppet.emotes[i].mouth.length; j++) {
-                this.emotes[i].mouth.addChild(stage.getAsset(puppet.emotes[i].mouth[j], 'mouth', i))
-            }
-            for (let j = 0; j < puppet.emotes[i].eyes.length; j++) {
-                this.emotes[i].eyes.addChild(stage.getAsset(puppet.emotes[i].eyes[j], 'eyes', i))
-            }
-        }
-        this.head.addChild(this.mouthsContainer)
-        this.head.addChild(this.eyesContainer)
-        this.hat = new Container()
-        for (let i = 0; i < puppet.hat.length; i++) {
-            this.hat.addChild(stage.getAsset(puppet.hat[i], 'hat'))
-        }
-        this.head.addChild(this.hat)
-        this.head.pivot.y = - this.headBase.height / 2
-        this.head.y = - this.headBase.height / 2
-        this.deadbonesTargetY = this.deadbonesStartY = - this.headBase.height / 2
-        this.container.addChild(this.head)
-
-        this.props = new Container()
-        for (let i = 0; i < puppet.props.length; i++) {
-            this.props.addChild(stage.getAsset(puppet.props[i], 'props'))
-        }
-        this.container.addChild(this.props)
+        this.container.addChild(this.handleLayer(puppet.layers))
 
         // Finish Setup
         this.changeEmote(puppet.emote)
 
         // Place Puppet on Stage
         this.container.interactive = true
-        this.container.puppet = puppet
+        this.container.puppet = this
         this.container.id = id
         this.container.y = stage.screen.clientHeight / stage.puppetStage.scale.y
         this.container.x = (this.position - 0.5) * stage.slotWidth
-        this.container.scale.x = this.container.scale.y = (stage.project.puppetScale || 1) 
+        this.container.scale.x = this.container.scale.y =
+            (stage.project.puppetScale || 1) 
         this.container.scale.x *= this.facingLeft ? -1 : 1
+    }
+
+    handleLayer(layer, inherit = {}) {
+        const container = new Container()
+        Object.keys(layer).forEach(k => {if (!(k in container)) container[k] = layer[k]})
+        Object.keys(inherit).forEach(k => inherit[k] == null && delete inherit[k])
+        Object.keys(inherit).forEach(k => {if (!(k in container)) container[k] = inherit[k]})
+
+        if (layer.children) {
+            const inh = Object.assign((({ head, emote, emoteLayer }) =>
+                ({ head, emote, emoteLayer }))(layer), inherit)
+            layer.children.forEach(child =>
+                container.addChild(this.handleLayer(child, inh)))
+        } else {
+            container.addChild(this.stage.getAsset(container, layer))
+        }
+
+        if (inherit.head == null && layer.head)
+            this.head.push(container)
+
+        if (container.emote != null && (inherit.emoteLayer == null && layer.emoteLayer || !layer.children)) {
+            if (!(container.emote in this.emotes)) this.emotes[container.emote] = {
+                base: [],
+                eyes: [],
+                mouth: []
+            }
+            this.emotes[container.emote][container.emoteLayer ?
+                container.emoteLayer : 'base'].push(container)
+        } else if (inherit.babble == null && layer.babble) {
+            container.visible = false
+        }
+
+        return container
     }
 
     changeEmote(emote) {
         this.emote = emote || '0'
-        let emotes = Object.keys(this.emotes)
-        for (let i = 0; i < emotes.length; i++) {
-            this.emotes[emotes[i]].mouth.visible = false
-            this.emotes[emotes[i]].eyes.visible = false
+        const setEmoteVisible = visible => emote => {
+            emote.base.forEach(layer => layer.visible = visible)
+            emote.eyes.forEach(layer => layer.visible = visible)
+            emote.mouth.forEach(layer => layer.visible = visible)
         }
-        if (this.emotes[emote] && this.emotes[emote].enabled) {
-            this.emotes[emote].mouth.visible = true
-            this.emotes[emote].eyes.visible = true
-        } else {
-            this.emotes['0'].mouth.visible = true
-            this.emotes['0'].eyes.visible = true
-        }
+        Object.values(this.emotes).forEach(setEmoteVisible(false))
+        setEmoteVisible(true)(emote in this.emotes ?
+            this.emotes[emote] :
+            this.emotes['0'])
     }
 
     setBabbling(babble) {
@@ -125,11 +109,9 @@ class Puppet {
 
             if (this.deadbonesStyle) {
                 this.deadbonesAnim = 0
-                this.deadbonesDuration = 100
-                this.deadbonesTargetY = - this.headBase.height / 2
-                this.deadbonesTargetRotation = 0
-                this.deadbonesStartY = this.head.y
-                this.deadbonesStartRotation = this.head.rotation
+                this.deadbonesDuration = 0
+                this.deadbonesTargetY = this.deadbonesStartY = 0
+                this.deadbonesTargetRotation = this.deadbonesStartRotation = 0
             }
         }
     }
@@ -138,68 +120,34 @@ class Puppet {
         if (this.movingAnim === 0) this.movingAnim = 0.6
     }
 
-    addEmote(emote) {
-        if (this.emotes[emote]) return
-        this.emotes[emote] = {
-            "mouth": new Container(),
-            "eyes": new Container()
-        }
-        this.mouthsContainer.addChild(this.emotes[emote].mouth)
-        this.eyesContainer.addChild(this.emotes[emote].eyes)
-    }
-
-    applyToAsset(id, callback) {
-        let character = this.container.puppet
-        let topLevel = ["body", "head", "hat", "props"]
-
-        for (let j = 0; j < topLevel.length; j++)
-            for (let k = 0; k < character[topLevel[j]].length; k++)
-                if (character[topLevel[j]][k].id === id)
-                    callback(character[topLevel[j]][k], this[topLevel[j] === "head" ? "headBase" : topLevel[j]].children[k], topLevel[j] === "head" ? "headBase" : topLevel[j])
-                
-        let emotes = Object.keys(character.emotes)
-        for (let j = 0; j < emotes.length; j++) {
-            for (let k = 0; k < character.emotes[emotes[j]].eyes.length; k++)
-                if (character.emotes[emotes[j]].eyes[k].id === id)
-                    callback(character.emotes[emotes[j]].eyes[k], this.emotes[emotes[j]].eyes.children[k], "eyes", emotes[j])
-            for (let k = 0; k < character.emotes[emotes[j]].mouth.length; k++)
-                if (character.emotes[emotes[j]].mouth[k].id === id)
-                    callback(character.emotes[emotes[j]].mouth[k], this.emotes[emotes[j]].mouth.children[k], "mouth", emotes[j])
-        }
+    applyToAsset(id, callback, parent, layer) {
+        layer = layer || this.puppet.layers
+        
+        if (layer.children) {
+            layer.children.forEach(l => this.applyToAsset(id, callback, layer, l))
+        } else if (layer.id === id)
+            callback(parent, layer)
     }
 
     update(updateBabble = true) {
         // Update position
-        this.container.scale.x = this.container.scale.y = (this.stage.project.puppetScale || 1) 
-        this.container.scale.x *= this.facingLeft ? -1 : 1
-        this.container.y = this.stage.bounds.height / this.stage.puppetStage.scale.y
-        this.container.x = this.position <= 0 ? - Math.abs(this.container.width) / 2 :                                      // Starting left of screen
-                           this.position >= this.stage.project.numCharacters + 1 ? 
-                           this.stage.project.numCharacters * this.stage.slotWidth + Math.abs(this.container.width) / 2 :   // Starting right of screen
-                           (this.position - 0.5) * this.stage.slotWidth                                                     // Starting on screen
+        this.updatePosition()
 
         // Update emote
-        let emotes = Object.keys(this.emotes)
-        for (let i = 0; i < emotes.length; i++) {
-            this.emotes[emotes[i]].mouth.visible = false
-            this.emotes[emotes[i]].eyes.visible = false
-        }
-        if (this.emotes[this.emote] && this.emotes[this.emote].enabled) {
-            this.emotes[this.emote].mouth.visible = true
-            this.emotes[this.emote].eyes.visible = true
-        } else {
-            this.emotes['0'].mouth.visible = true
-            this.emotes['0'].eyes.visible = true
-        }
+        this.changeEmote(this.emote)
 
         // Update babble
         if (updateBabble) {
             if (this.deadbonesStyle) {
                 this.deadbonesAnim = 0
                 this.deadbonesDuration = 100 + Math.random() * 200
-                this.deadbonesStartY = this.head.y = Math.random() * - 20 - this.headBase.height / 2
+                this.deadbonesStartY = this.head.y = 10 - Math.random() * 20
                 this.deadbonesStartRotation = this.head.rotation = 0.1 - Math.random() * 0.2
-                this.deadbonesTargetY = Math.random() * - 20 - this.headBase.height / 2
+                this.head.forEach(a => {
+                    a.y = a.asset.y + this.deadbonesStartY
+                    a.rotation = a.asset.rotation + this.deadbonesStartRotation
+                })
+                this.deadbonesTargetY = 10 - Math.random() * 20
                 this.deadbonesTargetRotation = 0.1 - Math.random() * 0.2
             } else {
                 this.updateEyeBabble()
@@ -208,26 +156,60 @@ class Puppet {
         }
     }
 
+    updatePosition() {
+        this.container.scale.x = this.container.scale.y = (this.stage.project.puppetScale || 1) 
+        this.container.scale.x *= this.facingLeft ? -1 : 1
+        this.container.y = this.stage.bounds.height / this.stage.puppetStage.scale.y
+        let pos = this.position % (this.stage.project.numCharacters + 1)
+        if (pos < 0) pos += this.stage.project.numCharacters + 1
+        this.container.x = pos <= 0 ? - Math.abs(this.container.width) / 2 :                      // Starting left of screen
+           pos >= this.stage.project.numCharacters + 1 ? 
+           this.stage.project.numCharacters * this.stage.slotWidth + Math.abs(this.container.width) / 2 :   // Starting right of screen
+           (pos - 0.5) * this.stage.slotWidth                                                     // Starting on screen
+    }
+
     updateEyeBabble() {
-        if (this.emotes[this.emote]) this.emotes[this.emote].eyes.visible = false
-        this.emotes['0'].eyes.visible = false
-        for (let j = 0; j < this.eyes.length; j++) {
-            if (this.emotes[this.eyes[j]]) this.emotes[this.eyes[j]].eyes.visible = false
+        // Disable this emote's eyes
+        if (this.emotes[this.emote]) this.emotes[this.emote].eyes.forEach(c => c.visible = false)
+        this.emotes['0'].eyes.forEach(c => c.visible = false)
+
+        // Find eyes to set
+        const reducer = (acc, curr) => {
+            if (curr.babble && curr.emoteLayer === 'eyes') {
+                return acc.concat(curr)
+            } else if (curr.children) {
+                return curr.children.reduce(reducer, acc)
+            } else return acc
         }
-        let eyes = this.eyes[Math.floor(Math.random() * this.eyes.length)]
-        this.emotes[this.emotes[eyes] ? eyes : '0'].eyes.visible = true
+        const eyes = this.container.children.reduce(reducer, [])
+        eyes.forEach(e => e.visible = false);
+
+        // Set new eyes
+        ([eyes[Math.floor(Math.random() * eyes.length)]] || this.emotes['0'].eyes).
+            forEach(c => c.visible = true)
         this.eyesAnim = 0
         this.eyesDuration = (0.1 + Math.random()) * this.eyeBabbleDuration
     }
 
     updateMouthBabble() {
-        if (this.emotes[this.emote]) this.emotes[this.emote].mouth.visible = false
-        this.emotes['0'].mouth.visible = false
-        for (let j = 0; j < this.mouths.length; j++) {
-            if (this.emotes[this.mouths[j]]) this.emotes[this.mouths[j]].mouth.visible = false
+        // Disable this emote's eyes
+        if (this.emotes[this.emote]) this.emotes[this.emote].mouth.forEach(c => c.visible = false)
+        this.emotes['0'].mouth.forEach(c => c.visible = false)
+
+        // Find eyes to set
+        const reducer = (acc, curr) => {
+            if (curr.babble && curr.emoteLayer === 'mouth') {
+                return acc.concat(curr)
+            } else if (curr.children) {
+                return curr.children.reduce(reducer, acc)
+            } else return acc
         }
-        let mouth = this.mouths[Math.floor(Math.random() * this.mouths.length)]
-        this.emotes[this.emotes[mouth] ? mouth : '0'].mouth.visible = true
+        const mouths = this.container.children.reduce(reducer, [])
+        mouths.forEach(e => e.visible = false);
+
+        // Set new mouth
+        ([mouths[Math.floor(Math.random() * mouths.length)]] || this.emotes['0'].mouths).
+            forEach(c => c.visible = true)
         this.mouthAnim = 0
         this.mouthDuration = (0.1 + Math.random()) * this.mouthBabbleDuration
     }
