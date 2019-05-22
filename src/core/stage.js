@@ -106,13 +106,9 @@ class Stage {
     }
 
     reloadAssets(callback) {
-        Object.keys(TextureCache).forEach(k => {if (TextureCache[k]) TextureCache[k].destroy(true)})
-
-        // Load Assets
         Object.values(this.assets).forEach(a => {
-            if (!TextureCache[path.join(this.assetsPath, a.location)])
-                TextureCache[path.join(this.assetsPath, a.location)] =
-                    Texture.fromImage(path.join(this.assetsPath, a.location))
+            TextureCache[path.join(this.assetsPath, a.location)] =
+                Texture.fromImage(path.join(this.assetsPath, a.location))
         })
         let stage = this
         let onLoad = () => {
