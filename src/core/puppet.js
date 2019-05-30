@@ -32,7 +32,7 @@ class Puppet {
         this.mouthBabbleDuration = puppet.mouthBabbleDuration || 270
         this.direction = 0
         this.head = []
-        this.emotes = { 0: { base: [], eyes: [], mouth: [] } }
+        this.emotes = { }
 
         // Construct Puppet
         this.container.addChild(this.handleLayer(puppet.layers))
@@ -57,28 +57,72 @@ class Puppet {
         Object.keys(inherit).forEach(k => inherit[k] == null && delete inherit[k])
         Object.keys(inherit).forEach(k => {if (!(k in container)) container[k] = inherit[k]})
 
-        if (layer.children) {
+        if (layer.head != null) {
+            if (inherit.head == null) {
+                this.head.push(container)
+            } else if (this.stage.status) {
+                this.stage.status.warn(`[${this.puppet.name}] Attempting to make layer '${layer.name}' a head layer but is already inside one. Ignoring...`)
+            }
+        }
+
+        // Check if we're trying to add an emote that already exists
+        if (inherit.emote == null && layer.emote != null && layer.emote in this.emotes) {
+            if (this.stage.status)
+                this.stage.status.warn(`[${this.puppet.name}] Attempting to create emote '${layer.name}' (${layer.emote}) but emote '${this.emotes[layer.emote].name}' (${layer.emote}) already exists. Ignoring...`)
+        // Otherwise, check if we're trying to add an emote or are in an emote
+        } else if (layer.emote != null || inherit.emote != null) {
+            // If we're the first layer with an emote...
+            if (inherit.emote == null) {
+                this.emotes[layer.emote] = {
+                    name: layer.name,
+                    base: [],
+                    eyes: [],
+                    mouth: []
+                }
+
+                // And add us to that emote's right emoteLayer
+                this.emotes[layer.emote][layer.emoteLayer ? layer.emoteLayer : 'base'].push(container)
+
+                if (this.stage.status)
+                    this.stage.status.info(`[${this.puppet.name}] Creating emote '${layer.name}' (${layer.emote})`)
+            }
+
+            // If they told us to be a specific emote, but we're already inside an emote, send a warning
+            if (this.stage.status && layer.emote != null && inherit.emote != null) {
+                this.stage.status.warn(`[${this.puppet.name}] Attempting to place emote '${layer.name}' (${layer.emote}) inside emote '${this.emotes[inherit.emote].name}' (${inherit.emote}). Ignoring...`)
+            }
+
+            // If we're not the first layer with a specific emote, and specify an emote Layer...
+            if (layer.emote == null && layer.emoteLayer != null) {
+                // check if we're already inside an emoteLayer. If we aren't, add ourselves to that emoteLayer
+                // If we already are in one, send a warning
+                if (inherit.emoteLayer == null) {
+                    this.emotes[inherit.emote][layer.emoteLayer].push(container)
+                } else if (this.stage.status) {
+                    this.stage.status.warn(`[${this.puppet.name}] Attempting to place a${layer.emoteLayer === 'mouth' ? ' mouth' : 'n eyes'} layer '${layer.name}' inside a${inherit.emoteLayer === 'mouth' ? ' mouth' : 'n eyes'}. Ignoring...`)
+                }
+            }
+        }
+
+        if (layer.children || this.stage.assets[layer.id].type === 'bundle') {
+            if (layer.scaleX != null || layer.scaleY != null) {
+                container.scale.set(layer.scaleX, layer.scaleY)
+            }
+
+            if (layer.x != null || layer.x != null) {
+                container.position.set(layer.x, layer.y)
+            }
+
+            if (layer.rotation != null) {
+                container.rotation = layer.rotation
+            }
+
             const inh = Object.assign((({ head, emote, emoteLayer }) =>
-                ({ head, emote, emoteLayer }))(layer), inherit)
-            layer.children.forEach(child =>
+                ({ head, emote, emoteLayer }))(layer), inherit);
+            (layer.children ? layer : this.stage.assets[layer.id].layers).children.forEach(child =>
                 container.addChild(this.handleLayer(child, inh)))
         } else {
             container.addChild(this.stage.getAsset(container, layer))
-        }
-
-        if (inherit.head == null && layer.head)
-            this.head.push(container)
-
-        if (container.emote != null && (inherit.emoteLayer == null && layer.emoteLayer || !layer.children)) {
-            if (!(container.emote in this.emotes)) this.emotes[container.emote] = {
-                base: [],
-                eyes: [],
-                mouth: []
-            }
-            this.emotes[container.emote][container.emoteLayer ?
-                container.emoteLayer : 'base'].push(container)
-        } else if (inherit.babble == null && layer.babble) {
-            container.visible = false
         }
 
         return container
@@ -92,9 +136,10 @@ class Puppet {
             emote.mouth.forEach(layer => layer.visible = visible)
         }
         Object.values(this.emotes).forEach(setEmoteVisible(false))
-        setEmoteVisible(true)(emote in this.emotes ?
-            this.emotes[emote] :
-            this.emotes['0'])
+        if (emote in this.emotes)
+            setEmoteVisible(true)(this.emotes[emote])
+        else if ('0' in this.emotes)
+            setEmoteVisible(true)(this.emotes['0'])
     }
 
     setBabbling(babble) {

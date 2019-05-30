@@ -97,12 +97,15 @@ class Stage {
     addAsset(id, asset, callback) {
         this.assets[id] = asset
         let date = Date.now()
-        TextureCache[path.join(this.assetsPath, asset.location)] =
-            Texture.fromImage(path.join(this.assetsPath, asset.location + "?random=" + date))
-        BaseTextureCache[path.join(this.assetsPath, asset.location)] =
-            BaseTextureCache[path.join(this.assetsPath, asset.location + "?random=" + date)]
-        if (callback)
-            TextureCache[path.join(this.assetsPath, asset.location)].baseTexture.on('loaded', callback)
+        if (asset.type !== "bundle") {
+            TextureCache[path.join(this.assetsPath, asset.location)] =
+                Texture.fromImage(path.join(this.assetsPath, asset.location + "?random=" + date))
+            BaseTextureCache[path.join(this.assetsPath, asset.location)] =
+                BaseTextureCache[path.join(this.assetsPath, asset.location + "?random=" + date)]
+            if (callback)
+                TextureCache[path.join(this.assetsPath, asset.location)].baseTexture.on('loaded', callback)
+        } else if (callback)
+            callback()
     }
 
     reloadAssets(callback) {
@@ -301,8 +304,10 @@ class Stage {
                     // If we're not at the final slot yet, reset the animation
                     if (puppet.position != puppet.target) puppet.movingAnim = 0
                     else puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.project.puppetScale || 1)
-                } else if (puppet.movingAnim >= 1) puppet.movingAnim = 0
-                else if (puppet.movingAnim < 0.6) puppet.container.scale.x = puppet.direction * (this.project.puppetScale || 1)
+                } else if (puppet.movingAnim >= 1) {
+                    puppet.movingAnim = 0
+                    puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.project.puppetScale || 1)
+                } else if (puppet.movingAnim < 0.6) puppet.container.scale.x = puppet.direction * (this.project.puppetScale || 1)
 
                 // Scale in a sin formation such that it does 3 half circles per slot, plus 2 more at the end
                 puppet.container.scale.y = (1 + Math.sin((1 + puppet.movingAnim * 5) * Math.PI) / 40) * (this.project.puppetScale || 1) 
