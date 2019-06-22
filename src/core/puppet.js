@@ -105,6 +105,18 @@ class Puppet {
         }
 
         if (layer.children || this.stage.assets[layer.id].type === 'bundle') {
+            if (!layer.children) {
+                if (layer.id in inherit.bundles) {
+                    // TODO would people be interested in allowing recursion up to N levels?
+                    if (this.stage.status)
+                        this.stage.status.warn(`[${this.puppet.name}] Attempting to add recursive asset bundle. Skipping recursion...`)
+                    return container
+                }
+                if (!inherit.bundles)
+                    inherit.bundles = {}
+                inherit.bundles[layer.id] = true
+            }
+
             if (layer.scaleX != null || layer.scaleY != null) {
                 container.scale.set(layer.scaleX, layer.scaleY)
             }
