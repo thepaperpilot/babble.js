@@ -9,6 +9,15 @@ let Container = PIXI.Container
  */
 class Puppet {
 
+    // Give it a layer and what it inherited, and it'll return
+    // what the layer's children will inherit
+    static getInherit(layer, inherit) {
+        return Object.assign((({ head, emote, emoteLayer, bundles }) =>
+            ({ head, emote, emoteLayer, bundles }))(layer), inherit, {
+                bundles: layer.bundles ? (inherit.bundles || []).concat(layer.bundles) : inherit.bundles
+            })
+    }
+
     /**
      * @param {Stage} stage - the stage this puppet will be attached to
      * @param {Object} puppet - object with all the data to construct the puppet
