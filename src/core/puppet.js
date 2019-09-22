@@ -12,10 +12,24 @@ class Puppet {
     // Give it a layer and what it inherited, and it'll return
     // what the layer's children will inherit
     static getInherit(layer, inherit) {
-        return Object.assign((({ head, emote, emoteLayer, bundles }) =>
-            ({ head, emote, emoteLayer, bundles }))(layer), inherit, {
-                bundles: layer.bundles ? (inherit.bundles || []).concat(layer.bundles) : inherit.bundles
-            })
+        return Object.assign((({ head, emote, emoteLayer }) =>
+            ({ head, emote, emoteLayer }))(layer), inherit)
+    }
+
+    // If you pass this function an assets object, a root layer, and a layer handler
+    // it'll run through every child of that layer recursively and run that
+    // layer handler on every layer. Handles asset bundles and ignores
+    // recursive asset bundles
+    // If you ever want it to stop after handling a specific layer, just have
+    // the layer handler return true when it should stop
+    // Note this is only for working on layer data, not layers on the Puppet container
+    static handleLayer(assets, layer, handleLayer, bundles = []) {
+        if (handleLayer(layer, bundles))
+            return true
+        if (layer.children)
+            return layer.children.find(l => Puppet.handleLayer(assets, l, handleLayer, bundles))
+        if (layer.id in assets && assets[layer.id].type === 'bundle' && !bundles.includes(layer.id))
+            return assets[layer.id].layers.children.find(l => Puppet.handleLayer(assets, l, handleLayer, [...bundles, layer.id]))
     }
 
     /**
@@ -115,15 +129,15 @@ class Puppet {
 
         if (layer.children || this.stage.assets[layer.id].type === 'bundle') {
             if (!layer.children) {
-                if (layer.id in inherit.bundles) {
+                if (inherit.bundles != null && inherit.bundles.includes(layer.id)) {
                     // TODO would people be interested in allowing recursion up to N levels?
                     if (this.stage.status)
                         this.stage.status.warn(`[${this.puppet.name}] Attempting to add recursive asset bundle. Skipping recursion...`)
                     return container
                 }
                 if (!inherit.bundles)
-                    inherit.bundles = {}
-                inherit.bundles[layer.id] = true
+                    inherit.bundles = []
+                inherit.bundles.push(layer.id)
             }
 
             if (layer.scaleX != null || layer.scaleY != null) {
@@ -138,8 +152,7 @@ class Puppet {
                 container.rotation = layer.rotation
             }
 
-            const inh = Object.assign((({ head, emote, emoteLayer }) =>
-                ({ head, emote, emoteLayer }))(layer), inherit);
+            const inh = Puppet.getInherit(layer, inherit);
             (layer.children ? layer : this.stage.assets[layer.id].layers).children.forEach(child =>
                 container.addChild(this.handleLayer(child, inh)))
         } else {
