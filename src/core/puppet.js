@@ -32,6 +32,41 @@ class Puppet {
             return assets[layer.id].layers.children.find(l => Puppet.handleLayer(assets, l, handleLayer, [...bundles, layer.id]))
     }
 
+    static createTween(layer, container) {
+        let tween = PIXI.tweenManager.createTween(container)
+        const easing = layer.easing in PIXI.tween.Easing ? layer.easing : 'linear'
+        tween.easing = PIXI.tween.Easing[easing]()
+        tween.time = layer.duration || 1000
+        tween.delay = layer.delay || 0
+        switch (layer.animation) {
+        case 'FADE_ZOOM':
+            container.alpha = 0
+            container.scale.x = 1.5
+            container.scale.y = 1.5
+            tween.from({
+                alpha: 0,
+                scale: { x: 1.5, y: 1.5 }
+            })
+            tween.to({
+                alpha: 1,
+                scale: { x: 1, y: 1 }
+            })
+            break
+        case 'FADE':
+            container.alpha = 0
+            tween.from({
+                alpha: 0
+            })
+            tween.to({
+                alpha: 1
+            })
+            break
+        default:
+            return container
+        }
+        tween.start()
+    }
+
     /**
      * @param {Stage} stage - the stage this puppet will be attached to
      * @param {Object} puppet - object with all the data to construct the puppet
@@ -127,7 +162,7 @@ class Puppet {
             }
         }
 
-        if (layer.children || this.stage.assets[layer.id].type === 'bundle') {
+        if (layer.children || (layer.id in this.stage.assets && this.stage.assets[layer.id].type === 'bundle')) {
             if (!layer.children) {
                 if (inherit.bundles != null && inherit.bundles.includes(layer.id)) {
                     // TODO would people be interested in allowing recursion up to N levels?
@@ -159,15 +194,29 @@ class Puppet {
             container.addChild(this.stage.getAsset(container, layer))
         }
 
+        // Set up the enter animation, if the layer has one
+        if (layer.animation && this.stage.project.animations !== false) {
+            Puppet.createTween(layer, container)
+        }
+
         return container
     }
 
     changeEmote(emote) {
         this.emote = emote || '0'
+        const handleLayer = visible => layer => {
+            layer.visible = visible
+            if (visible &&
+                layer.animation &&
+                this.stage.project.animations !== false) {
+                Puppet.createTween(layer, layer)
+            }
+        }
         const setEmoteVisible = visible => emote => {
-            emote.base.forEach(layer => layer.visible = visible)
-            emote.eyes.forEach(layer => layer.visible = visible)
-            emote.mouth.forEach(layer => layer.visible = visible)
+            const h = handleLayer(visible)
+            emote.base.forEach(h)
+            emote.eyes.forEach(h)
+            emote.mouth.forEach(h)
         }
         Object.values(this.emotes).forEach(setEmoteVisible(false))
         if (emote in this.emotes)

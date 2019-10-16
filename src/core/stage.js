@@ -2,6 +2,7 @@
 const PIXI = require('pixi.js')
 window.PIXI = PIXI;
 window.PIXI[ "default" ] = PIXI;
+require('pixi-tween')
 const timer = require('pixi-timer')
 const Puppet = require('./puppet')
 const path = require('path')
@@ -380,6 +381,7 @@ class Stage {
         })
         this.renderer.render(this.stage)
         PIXI.timerManager.update(delta / 1000)
+        PIXI.tweenManager.update(delta / 1000)
     }
 }
 
