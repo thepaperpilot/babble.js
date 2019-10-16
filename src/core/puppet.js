@@ -93,7 +93,7 @@ class Puppet {
         this.emotes = { }
 
         // Construct Puppet
-        this.container.addChild(this.handleLayer(puppet.layers))
+        this.container.addChild(this.createLayer(puppet.layers))
 
         // Finish Setup
         this.changeEmote(puppet.emote)
@@ -109,7 +109,7 @@ class Puppet {
         this.container.scale.x *= this.facingLeft ? -1 : 1
     }
 
-    handleLayer(layer, inherit = {}) {
+    createLayer(layer, inherit = {}) {
         const container = new Container()
         Object.keys(layer).forEach(k => {if (!(k in container)) container[k] = layer[k]})
         Object.keys(inherit).forEach(k => inherit[k] == null && delete inherit[k])
@@ -189,7 +189,7 @@ class Puppet {
 
             const inh = Puppet.getInherit(layer, inherit);
             (layer.children ? layer : this.stage.assets[layer.id].layers).children.forEach(child =>
-                container.addChild(this.handleLayer(child, inh)))
+                container.addChild(this.createLayer(child, inh)))
         } else {
             container.addChild(this.stage.getAsset(container, layer))
         }
