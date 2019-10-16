@@ -223,6 +223,7 @@ class Puppet {
             setEmoteVisible(true)(this.emotes[emote])
         else if ('0' in this.emotes)
             setEmoteVisible(true)(this.emotes['0'])
+        this.stage.dirty = true
     }
 
     setBabbling(babble) {
@@ -294,6 +295,7 @@ class Puppet {
            pos >= this.stage.project.numCharacters + 1 ? 
            this.stage.project.numCharacters * this.stage.slotWidth + Math.abs(this.container.width) / 2 :   // Starting right of screen
            (pos - 0.5) * this.stage.slotWidth                                                     // Starting on screen
+        this.stage.dirty = true
     }
 
     updateEyeBabble() {
@@ -317,6 +319,7 @@ class Puppet {
             forEach(c => c.visible = true)
         this.eyesAnim = 0
         this.eyesDuration = (0.1 + Math.random()) * this.eyeBabbleDuration
+        this.stage.dirty = true
     }
 
     updateMouthBabble() {
@@ -340,6 +343,7 @@ class Puppet {
             forEach(c => c.visible = true)
         this.mouthAnim = 0
         this.mouthDuration = (0.1 + Math.random()) * this.mouthBabbleDuration
+        this.stage.dirty = true
     }
 }
 

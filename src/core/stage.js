@@ -43,6 +43,7 @@ class Stage {
         this.status = status
         this.MOVE_DURATION = MOVE_DURATION
         this.enabled = enabled === undefined ? true : enabled
+        this.dirty = true
 
         // Create some basic objects
         this.stage = new Container()
@@ -187,6 +188,7 @@ class Stage {
             this.puppets.splice(this.puppets.indexOf(puppet), 1)
             this.puppetStage.removeChild(puppet.container)
         }
+        this.dirty = true
     }
 
     clearPuppets() {
@@ -194,6 +196,7 @@ class Stage {
             this.puppetStage.removeChild(this.puppets[0].container)
             this.puppets.splice(0, 1)
         }
+        this.dirty = true
     }
 
     banishPuppets() {
@@ -289,6 +292,7 @@ class Stage {
             // I've tried to emulate what puppet pals does as closely as possible
             // But frankly it's difficult to tell
             if (puppet.target != puppet.position || puppet.movingAnim !== 0) {
+                this.dirty = true
                 // Whether its going left or right
                 if (puppet.direction === 0 && puppet.target != puppet.position)
                     puppet.direction = puppet.target > puppet.position ? 1 : -1
@@ -331,6 +335,7 @@ class Stage {
                 puppet.container.x = interpolation === 1 ? start : start + (end - start) * interpolation
             }
             if (puppet.babbling) {
+                this.dirty = true
                 // Update how long each face part has been on display
                 puppet.eyesAnim += delta
                 puppet.mouthAnim += delta
@@ -350,6 +355,7 @@ class Stage {
             // But I think this looks "close enough", and probably the best I'm going
             // to get without Rob actually telling people how Puppet Pals does it
             if (puppet.deadbonesStyle && (puppet.babbling || puppet.deadbonesDuration !== 0)) {
+                this.dirty = true
                 puppet.deadbonesAnim += delta
                 if (puppet.deadbonesAnim >= puppet.deadbonesDuration) {
                     puppet.deadbonesAnim = 0
@@ -379,8 +385,12 @@ class Stage {
                 }
             }
         })
-        this.renderer.render(this.stage)
+        if (this.dirty)
+            this.renderer.render(this.stage)
+        this.dirty = false
         PIXI.timerManager.update(delta / 1000)
+        if (PIXI.tweenManager.tweens.length > 0)
+            this.dirty = true
         PIXI.tweenManager.update(delta / 1000)
     }
 }
