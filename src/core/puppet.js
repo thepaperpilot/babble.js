@@ -65,6 +65,7 @@ class Puppet {
             return container
         }
         tween.start()
+        return tween
     }
 
     /**
