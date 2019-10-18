@@ -140,7 +140,8 @@ class Puppet {
                 }
 
                 // And add us to that emote's right emoteLayer
-                this.emotes[layer.emote][layer.emoteLayer ? layer.emoteLayer : 'base'].push(container)
+                if (layer.emoteLayer)
+                    this.emotes[layer.emote][layer.emoteLayer].push(container)
 
                 if (this.stage.status)
                     this.stage.status.info(`[${this.puppet.name}] Creating emote '${layer.name}' (${layer.emote})`)
@@ -161,8 +162,13 @@ class Puppet {
                     this.stage.status.warn(`[${this.puppet.name}] Attempting to place a${layer.emoteLayer === 'mouth' ? ' mouth' : 'n eyes'} layer '${layer.name}' inside a${inherit.emoteLayer === 'mouth' ? ' mouth' : 'n eyes'}. Ignoring...`)
                 }
             }
+
+            // If we are an asset layer and aren't in an emote layer yet, add us to the base one
+            if ('id' in layer && layer.emoteLayer == null && inherit.emoteLayer == null)
+                this.emotes[inherit.emote || layer.emote].base.push(container)
         }
 
+        // Add children or asset
         if (layer.children || (layer.id in this.stage.assets && this.stage.assets[layer.id].type === 'bundle')) {
             if (!layer.children) {
                 if (inherit.bundles != null && inherit.bundles.includes(layer.id)) {
@@ -300,48 +306,26 @@ class Puppet {
     }
 
     updateEyeBabble() {
-        // Disable this emote's eyes
-        if (this.emotes[this.emote]) this.emotes[this.emote].eyes.forEach(c => c.visible = false)
-        this.emotes['0'].eyes.forEach(c => c.visible = false)
-
-        // Find eyes to set
-        const reducer = (acc, curr) => {
-            if (curr.babble && curr.emoteLayer === 'eyes') {
-                return acc.concat(curr)
-            } else if (curr.children) {
-                return curr.children.reduce(reducer, acc)
-            } else return acc
-        }
-        const eyes = this.container.children.reduce(reducer, [])
-        eyes.forEach(e => e.visible = false);
+        // Turn off any current eyes
+        const emotes = Object.values(this.emotes).filter(e => e.eyes.length > 0)
+        emotes.forEach(emote => emote.eyes.forEach(e => e.visible = false));
 
         // Set new eyes
-        ([eyes[Math.floor(Math.random() * eyes.length)]] || this.emotes['0'].eyes).
-            forEach(c => c.visible = true)
+        (emotes.length > 0 ? emotes[Math.floor(Math.random() * emotes.length)] : this.emotes['0'])
+            .eyes.forEach(e => e.visible = true)
         this.eyesAnim = 0
         this.eyesDuration = (0.1 + Math.random()) * this.eyeBabbleDuration
         this.stage.dirty = true
     }
 
     updateMouthBabble() {
-        // Disable this emote's eyes
-        if (this.emotes[this.emote]) this.emotes[this.emote].mouth.forEach(c => c.visible = false)
-        this.emotes['0'].mouth.forEach(c => c.visible = false)
-
-        // Find eyes to set
-        const reducer = (acc, curr) => {
-            if (curr.babble && curr.emoteLayer === 'mouth') {
-                return acc.concat(curr)
-            } else if (curr.children) {
-                return curr.children.reduce(reducer, acc)
-            } else return acc
-        }
-        const mouths = this.container.children.reduce(reducer, [])
-        mouths.forEach(e => e.visible = false);
+        // Turn off any current mouths
+        const emotes = Object.values(this.emotes).filter(e => e.mouth.length > 0)
+        emotes.forEach(emote => emote.mouth.forEach(e => e.visible = false));
 
         // Set new mouth
-        ([mouths[Math.floor(Math.random() * mouths.length)]] || this.emotes['0'].mouths).
-            forEach(c => c.visible = true)
+        (emotes.length > 0 ? emotes[Math.floor(Math.random() * emotes.length)] : this.emotes['0'])
+            .mouth.forEach(e => e.visible = true)
         this.mouthAnim = 0
         this.mouthDuration = (0.1 + Math.random()) * this.mouthBabbleDuration
         this.stage.dirty = true
