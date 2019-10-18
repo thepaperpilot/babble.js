@@ -18,9 +18,9 @@ let BaseTextureCache = PIXI.utils.BaseTextureCache,
     Texture = PIXI.Texture,
     TextureCache = PIXI.utils.TextureCache,
     autoDetectRenderer = PIXI.autoDetectRenderer,
-    loader = PIXI.loader,
+    loader = PIXI.Loader.shared,
     Rectangle = PIXI.Rectangle,
-    ticker = PIXI.ticker
+    ticker = PIXI.Ticker.shared
 
 /**
  * @class
@@ -49,7 +49,7 @@ class Stage {
         this.stage = new Container()
         this.puppetStage = new Container()
         this.stage.addChild(this.puppetStage)
-        this.renderer = autoDetectRenderer(1, 1, {transparent: true})
+        this.renderer = autoDetectRenderer({ width: 1, height: 1, transparent: true })
         this.screen = document.getElementById(element)
         this.screen.appendChild(this.renderer.view)
         
@@ -101,7 +101,7 @@ class Stage {
         let date = Date.now()
         if (asset.type !== "bundle") {
             TextureCache[path.join(this.assetsPath, asset.location)] =
-                Texture.fromImage(path.join(this.assetsPath, asset.location + "?random=" + date))
+                Texture.from(path.join(this.assetsPath, asset.location + "?random=" + date))
             BaseTextureCache[path.join(this.assetsPath, asset.location)] =
                 BaseTextureCache[path.join(this.assetsPath, asset.location + "?random=" + date)]
             if (callback)
@@ -113,19 +113,19 @@ class Stage {
     reloadAssets(callback) {
         Object.values(this.assets).forEach(a => {
             TextureCache[path.join(this.assetsPath, a.location)] =
-                Texture.fromImage(path.join(this.assetsPath, a.location))
+                Texture.from(path.join(this.assetsPath, a.location))
         })
         let stage = this
         let onLoad = () => {
             if (!Object.values(BaseTextureCache).some(a => a.isLoading)) {
                 callback(stage)
-                ticker.shared.remove(onLoad)
+                ticker.remove(onLoad)
             }
         }
 
         this.reloadPuppets()
         if (callback) {
-            ticker.shared.add(onLoad)
+            ticker.add(onLoad)
         }
     }
 
