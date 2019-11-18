@@ -165,7 +165,7 @@ class Puppet {
 
             // If we are an asset layer and aren't in an emote layer yet, add us to the base one
             if ('id' in layer && layer.emoteLayer == null && inherit.emoteLayer == null)
-                this.emotes[inherit.emote || layer.emote].base.push(container)
+                this.emotes[inherit.emote == null ? layer.emote : inherit.emote].base.push(container)
         }
 
         // Add children or asset
