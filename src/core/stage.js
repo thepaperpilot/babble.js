@@ -364,23 +364,23 @@ class Stage {
                         puppet.deadbonesStartY = puppet.deadbonesTargetY
                         puppet.deadbonesStartRotation = puppet.deadbonesTargetRotation
                         puppet.head.forEach(a => {
-                            a.y = a.asset.y + puppet.deadbonesStartY
-                            a.rotation = a.asset.rotation + puppet.deadbonesStartRotation
+                            a.y = (a.asset.y || 0) + puppet.deadbonesStartY
+                            a.rotation = (a.asset.rotation || 0) + puppet.deadbonesStartRotation
                         })
                         puppet.deadbonesTargetY = 10 - Math.random() * 20
                         puppet.deadbonesTargetRotation = 0.1 - Math.random() * 0.2
                     } else {
                         puppet.deadbonesDuration = 0
                         puppet.head.forEach(a => {
-                            a.y = a.asset.y + puppet.deadbonesTargetY
-                            a.rotation = a.asset.rotation + puppet.deadbonesTargetRotation
+                            a.y = (a.asset.y || 0) + puppet.deadbonesTargetY
+                            a.rotation = (a.asset.rotation || 0) + puppet.deadbonesTargetRotation
                         })
                     }
                 } else {
                     let percent = (puppet.deadbonesAnim / puppet.deadbonesDuration) * (puppet.deadbonesAnim / puppet.deadbonesDuration)
                     puppet.head.forEach(a => {
-                        a.y = a.asset.y + puppet.deadbonesStartY + (puppet.deadbonesTargetY - puppet.deadbonesStartY) * percent
-                        a.rotation = a.asset.rotation + puppet.deadbonesStartRotation + (puppet.deadbonesTargetRotation - puppet.deadbonesStartRotation) * percent
+                        a.y = (a.asset.y || 0) + puppet.deadbonesStartY + (puppet.deadbonesTargetY - puppet.deadbonesStartY) * percent
+                        a.rotation = (a.asset.rotation || 0) + puppet.deadbonesStartRotation + (puppet.deadbonesTargetRotation - puppet.deadbonesStartRotation) * percent
                     })
                 }
             }

@@ -112,6 +112,7 @@ class Puppet {
 
     createLayer(layer, inherit = {}) {
         const container = new Container()
+        container.asset = layer
         Object.keys(layer).forEach(k => {if (!(k in container)) container[k] = layer[k]})
         Object.keys(inherit).forEach(k => inherit[k] == null && delete inherit[k])
         Object.keys(inherit).forEach(k => {if (!(k in container)) container[k] = inherit[k]})
@@ -245,7 +246,7 @@ class Puppet {
 
             if (this.deadbonesStyle) {
                 this.deadbonesAnim = 0
-                this.deadbonesDuration = 0
+                this.deadbonesDuration = 200
                 this.deadbonesTargetY = this.deadbonesStartY = 0
                 this.deadbonesTargetRotation = this.deadbonesStartRotation = 0
             }
