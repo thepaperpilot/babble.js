@@ -66,7 +66,6 @@ class Stage {
         this.stage.addChild(this.background)
         this.stage.addChild(this.puppetStage)
         this.stage.addChild(this.foreground)
-        this.updateEnvironment()
         
         this.lastFrame = Date.now()
         this.puppets = []
@@ -78,10 +77,14 @@ class Stage {
         this.renderer.view.style.backgroundColor = environment.color
 
         // Load Assets
+        let stage = this
         if (loader.loading) {
-            this.resize()
-            if (callback) requestAnimationFrame(() => {callback(this)})
-            this.gameLoop()
+            loader.onComplete.once(function() { 
+                stage.resize()
+                stage.updateEnvironment()
+                if (callback) requestAnimationFrame(() => {callback(stage)})
+                stage.gameLoop()
+            })
             return
         }
         let texturesToLoad = false
@@ -91,10 +94,10 @@ class Stage {
                 texturesToLoad = true
             }
         })
-        let stage = this
         if (texturesToLoad) {
             loader.onComplete.once(function() { 
                 stage.resize()
+                stage.updateEnvironment()
                 if (callback) requestAnimationFrame(() => {callback(stage)})
                 stage.gameLoop()
             })
@@ -102,6 +105,7 @@ class Stage {
         } else {
             loader.load()
             stage.resize()
+            stage.updateEnvironment()
             if (callback) requestAnimationFrame(() => {callback(stage)})
             stage.gameLoop()
         }
