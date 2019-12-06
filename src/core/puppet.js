@@ -69,6 +69,7 @@ class Puppet {
     }
 
     /**
+     * @constructor
      * @param {Stage} stage - the stage this puppet will be attached to
      * @param {Object} puppet - object with all the data to construct the puppet
      * @param {number} id - UUID to refer to this puppet later
@@ -106,7 +107,7 @@ class Puppet {
         this.container.y = stage.screen.clientHeight / stage.puppetStage.scale.y
         this.container.x = (this.position - 0.5) * stage.slotWidth
         this.container.scale.x = this.container.scale.y =
-            (stage.project.puppetScale || 1) 
+            (stage.environment.puppetScale || 1) 
         this.container.scale.x *= this.facingLeft ? -1 : 1
     }
 
@@ -203,7 +204,7 @@ class Puppet {
         }
 
         // Set up the enter animation, if the layer has one
-        if (layer.animation && this.stage.project.animations !== false) {
+        if (layer.animation && this.stage.environment.animations !== false) {
             Puppet.createTween(layer, container)
         }
 
@@ -216,7 +217,7 @@ class Puppet {
             layer.visible = visible
             if (visible &&
                 layer.animation &&
-                this.stage.project.animations !== false) {
+                this.stage.environment.animations !== false) {
                 Puppet.createTween(layer, layer)
             }
         }
@@ -294,14 +295,14 @@ class Puppet {
     }
 
     updatePosition() {
-        this.container.scale.x = this.container.scale.y = (this.stage.project.puppetScale || 1) 
+        this.container.scale.x = this.container.scale.y = (this.stage.environment.puppetScale || 1) 
         this.container.scale.x *= this.facingLeft ? -1 : 1
         this.container.y = this.stage.bounds.height / this.stage.puppetStage.scale.y
-        let pos = this.position % (this.stage.project.numCharacters + 1)
-        if (pos < 0) pos += this.stage.project.numCharacters + 1
+        let pos = this.position % (this.stage.environment.numCharacters + 1)
+        if (pos < 0) pos += this.stage.environment.numCharacters + 1
         this.container.x = pos <= 0 ? - Math.abs(this.container.width) / 2 :                      // Starting left of screen
-           pos >= this.stage.project.numCharacters + 1 ? 
-           this.stage.project.numCharacters * this.stage.slotWidth + Math.abs(this.container.width) / 2 :   // Starting right of screen
+           pos >= this.stage.environment.numCharacters + 1 ? 
+           this.stage.environment.numCharacters * this.stage.slotWidth + Math.abs(this.container.width) / 2 :   // Starting right of screen
            (pos - 0.5) * this.stage.slotWidth                                                     // Starting on screen
         this.stage.dirty = true
     }

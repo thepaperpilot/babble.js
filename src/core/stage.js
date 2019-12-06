@@ -28,16 +28,24 @@ let BaseTextureCache = PIXI.utils.BaseTextureCache,
 class Stage {
 
     /**
+     * @constructor
      * @param {string} element - the id of the DOM element to append the stage to
-     * @param {Object} project - object with information on the assets, puppets, and stage settings
+     * @param {Object} environment - object with information on the background, sizing, and positioning of the stage
+     * @param {Number} environment.numCharacters - The (integer) amount of slots on the stage, for puppets to be positioned in
+     * @param {Number} environment.puppetScale - A float modifier for each puppet's size
+     * @param {Number} environment.width - How big the environment is. The stage will make sure its covered by the environment
+     * @param {Number} environment.height - How big the environment is. The stage will make sure its covered by the environment
+     * @param {boolean} [environment.animations] - Whether or not animations should be enabled. Default is true
+     * @param {string} [environment.color] - Background color of the stage. Default is null
+     * @param {Object} [environment.layers] - Assets to add below and/or above the puppets. Default is to only have the puppets layer
      * @param {Object[]} assets - array of assets
      * @param {string} assetsPath - path to the assets folder
      * @param {requestCallback} callback - function to be called after assets are loaded
      * @param {Object} [status] - object for logging stuff
      * @param {boolean} [enabled=true] - whether or not it should start updating from the start
      */
-    constructor(element, project, assets, assetsPath, callback, status, enabled) {
-        this.project = project
+    constructor(element, environment, assets, assetsPath, callback, status, enabled) {
+        this.environment = environment
         this.assets = assets
         this.assetsPath = assetsPath
         this.status = status
@@ -47,11 +55,18 @@ class Stage {
 
         // Create some basic objects
         this.stage = new Container()
-        this.puppetStage = new Container()
-        this.stage.addChild(this.puppetStage)
         this.renderer = autoDetectRenderer(1, 1, {transparent: true})
         this.screen = document.getElementById(element)
         this.screen.appendChild(this.renderer.view)
+
+        // Set up environment layers and the puppet stage
+        this.background = new Container()
+        this.puppetStage = new Container()
+        this.foreground = new Container()
+        this.stage.addChild(this.background)
+        this.stage.addChild(this.puppetStage)
+        this.stage.addChild(this.foreground)
+        this.updateEnvironment()
         
         this.lastFrame = Date.now()
         this.puppets = []
@@ -60,6 +75,7 @@ class Stage {
         // Make the game fit the entire window
         this.renderer.view.style.position = "absolute";
         this.renderer.view.style.display = "block";
+        this.renderer.view.style.backgroundColor = environment.color
 
         // Load Assets
         if (loader.loading) {
@@ -160,13 +176,45 @@ class Stage {
         if (this.bounds.width !== this.renderer.screen.width ||
             this.bounds.height !== this.renderer.screen.height)
             this.renderer.resize(this.bounds.width, this.bounds.height)
-        this.slotWidth = this.bounds.width / this.project.numCharacters
+        this.slotWidth = this.bounds.width / this.environment.numCharacters
         if (this.slotWidth < 400) {
             this.puppetStage.scale.x = this.puppetStage.scale.y = this.slotWidth / 400
             this.slotWidth = 400
         } else this.puppetStage.scale.x = this.puppetStage.scale.y = 1
 
+        const scale = Math.max(this.bounds.width / this.environment.width, this.bounds.height / this.environment.height)
+        this.background.scale.set(scale)
+        this.foreground.scale.set(scale)
+        this.background.position.set(this.bounds.width / 2, this.bounds.height)
+        this.foreground.position.set(this.bounds.width / 2, this.bounds.height)
+
         this.puppets.forEach(p => p.updatePosition())
+    }
+
+    updateEnvironment() {
+        while (this.foreground.children[0])
+            this.foreground.removeChildAt(0)
+        while (this.background.children[0])
+            this.background.removeChildAt(0)
+        if (this.environment.layers && this.environment.layers.children) {
+            let i = 0
+            while (i < this.environment.layers.children.length &&
+                this.environment.layers.children[i].id !== 'CHARACTER_PLACEHOLDER') {
+                const container = new Puppet(this, { layers: this.environment.layers.children[i] }, -1).container
+                container.position.set(0)
+                container.scale.set(1)
+                this.background.addChild(container)
+                i++
+            }
+            i++
+            while (i < this.environment.layers.children.length) {
+                const container = new Puppet(this, { layers: this.environment.layers.children[i] }, -1).container
+                container.position.set(0)
+                container.scale.set(1)
+                this.foreground.addChild(container)
+                i++
+            }
+        }
     }
 
     createPuppet(puppet) {
@@ -201,14 +249,14 @@ class Stage {
 
     banishPuppets() {
         this.puppets.forEach(puppet => {
-            if (puppet.target > this.project.numCharacters / 2) {
-                puppet.target = this.project.numCharacters + 1
+            if (puppet.target > this.environment.numCharacters / 2) {
+                puppet.target = this.environment.numCharacters + 1
                 puppet.facingLeft = false
-                puppet.container.scale.x = this.project.puppetScale || 1
+                puppet.container.scale.x = this.environment.puppetScale || 1
             } else {
                 puppet.target = 0
                 puppet.facingLeft = true
-                puppet.container.scale.x = -1 * (this.project.puppetScale || 1)
+                puppet.container.scale.x = -1 * (this.environment.puppetScale || 1)
             }
         })
     }
@@ -308,29 +356,29 @@ class Stage {
                     puppet.direction = 0
                     // If we're not at the final slot yet, reset the animation
                     if (puppet.position != puppet.target) puppet.movingAnim = 0
-                    else puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.project.puppetScale || 1)
+                    else puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.environment.puppetScale || 1)
                 } else if (puppet.movingAnim >= 1) {
                     puppet.movingAnim = 0
-                    puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.project.puppetScale || 1)
-                } else if (puppet.movingAnim < 0.6) puppet.container.scale.x = puppet.direction * (this.project.puppetScale || 1)
+                    puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.environment.puppetScale || 1)
+                } else if (puppet.movingAnim < 0.6) puppet.container.scale.x = puppet.direction * (this.environment.puppetScale || 1)
 
                 // Scale in a sin formation such that it does 3 half circles per slot, plus 2 more at the end
-                puppet.container.scale.y = (1 + Math.sin((1 + puppet.movingAnim * 5) * Math.PI) / 40) * (this.project.puppetScale || 1) 
+                puppet.container.scale.y = (1 + Math.sin((1 + puppet.movingAnim * 5) * Math.PI) / 40) * (this.environment.puppetScale || 1) 
                 // Update y value so it doesn't leave the bottom of the screen while bouncing
                 puppet.container.y = this.bounds.height / this.puppetStage.scale.y
                 // Linearly move across the slot, unless we're in the (.6 - 1) part of the animation, and ensure we're off screen even when the puppets are large
                 let interpolation = Math.min(1, puppet.movingAnim / 0.6)
-                let pos = puppet.position % (this.project.numCharacters + 1)
-                if (pos < 0) pos += this.project.numCharacters + 1
+                let pos = puppet.position % (this.environment.numCharacters + 1)
+                if (pos < 0) pos += this.environment.numCharacters + 1
                 let start = pos == 0 ?
                     puppet.direction === 1 ? - Math.abs(puppet.container.width) :                        // Starting on left edge of screen
-                        this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) : // Starting on right edge of screen
+                        this.environment.numCharacters * this.slotWidth + Math.abs(puppet.container.width) : // Starting on right edge of screen
                     (pos - 0.5) * this.slotWidth                                                         // Ending on screen
                 pos += puppet.direction
-                if (pos < 0) pos += this.project.numCharacters + 1
+                if (pos < 0) pos += this.environment.numCharacters + 1
                 let end = pos <= 0 ? - Math.abs(puppet.container.width) :                            // Starting left of screen
-                    pos >= this.project.numCharacters + 1 ? 
-                    this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) : // Starting right of screen
+                    pos >= this.environment.numCharacters + 1 ? 
+                    this.environment.numCharacters * this.slotWidth + Math.abs(puppet.container.width) : // Starting right of screen
                     (pos - 0.5) * this.slotWidth                                                     // Ending on screen
                 puppet.container.x = interpolation === 1 ? start : start + (end - start) * interpolation
             }

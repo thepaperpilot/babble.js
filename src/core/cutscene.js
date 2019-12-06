@@ -27,6 +27,7 @@
 class Cutscene {
 
     /**
+     * @constructor
      * @param {Stage} stage - the stage this puppet will be attached to
      * @param {Object[]} script - the script for the cutscene
      * @param {Object} actors - dictionary of actors (e.g. each member is "name": Character)
@@ -97,10 +98,10 @@ class Cutscene {
                 puppet.movingAnim = 0
                 if (action.position > puppet.position) {
                     puppet.facingLeft = false
-                    puppet.container.scale.x = this.stage.project.puppetScale
+                    puppet.container.scale.x = this.stage.environment.puppetScale
                 } else if (action.position != puppet.position) {
                     puppet.facingLeft = true
-                    puppet.container.scale.x = -this.stage.project.puppetScale
+                    puppet.container.scale.x = -this.stage.environment.puppetScale
                 }
                 this.actions.delay(callback, { delay: (Math.abs(puppet.target - puppet.position) * this.stage.MOVE_DURATION * 0.6 + this.stage.MOVE_DURATION * 0.4) * 1000, parent: action })
             },
@@ -109,7 +110,7 @@ class Cutscene {
                 
                 let puppet = this.stage.getPuppet(action.target)
                 puppet.facingLeft = action.facingLeft
-                puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * this.stage.project.puppetScale
+                puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * this.stage.environment.puppetScale
                 callback()
             },
             babble: function(callback, action) {
