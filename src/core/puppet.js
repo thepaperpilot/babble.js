@@ -38,6 +38,7 @@ class Puppet {
         tween.easing = PIXI.tween.Easing[easing]()
         tween.time = layer.duration || 1000
         tween.delay = layer.delay || 0
+        tween.expire = true
         switch (layer.animation) {
         case 'FADE_ZOOM':
             container.alpha = 0
