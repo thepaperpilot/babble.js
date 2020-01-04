@@ -27,6 +27,7 @@
     "browserify": "^14.4.0"
   },
   "dependencies": {
+    "pixi-particles": "^4.2.0",
     "pixi-timer": "~1.0.1",
     "pixi-tween": "^0.2.0",
     "pixi.js": "~4.5.3"

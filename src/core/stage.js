@@ -8,9 +8,6 @@ const Puppet = require('./puppet')
 const path = require('path')
 const trim = require('./../util/trimCanvas')
 
-// Constants
-const MOVE_DURATION = 0.75 // in seconds
-
 // Aliases
 let BaseTextureCache = PIXI.utils.BaseTextureCache,
     Container = PIXI.Container,
@@ -20,7 +17,12 @@ let BaseTextureCache = PIXI.utils.BaseTextureCache,
     autoDetectRenderer = PIXI.autoDetectRenderer,
     loader = PIXI.loader,
     Rectangle = PIXI.Rectangle,
-    ticker = PIXI.ticker
+    ticker = PIXI.ticker,
+    Emitter = require('pixi-particles').Emitter
+
+// Constants
+const MOVE_DURATION = 0.75 // in seconds
+const defaultParticle = Texture.from('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACwAAAAsCAQAAAC0jZKKAAACPElEQVR4AbXXcW/TMBAF8EtCypa1LCDB9/98ILG1dKNNCOZZT8h6N4562eZTzH8/ni6dfWns4kqtvbMOT2tmv+0XasG/F1aTLFxd5lDcCS8o0tyX58K9bVA9WZe40LNNqLkevrJr1HvrC1vgQoM820/UqQZubQBKWDKjDJjP+wg41/J/eAOQsGb2rWDlvKzMTyEMaJvBIHNpBdswOfhoZ4VL2h3Irc+srSiJPYv9B1Mr3IHcCS2ZJTFf2+RZ1NEWD5PF7mmQ/nfs85I9klb4KrNCa2YkZitcXmVZpwL3zFtwpYH6l3cWtqDMPP+Fb+zWPthW6BvUIJmZuOTN7APqKOjB9vZAuAM6ArvFE9CSeI5Y1B7PPfAFMPKMKMWVZmbCzKusoveoKcODjQDzgx3c6GnUFnADOAFGV5V16B7PI2BkBRjgmf4IWBbYu8I6lPuhSa2w4xP8k7CF/l5Q7HuiZW9ST+wpjgKLvP9ed6gAJXztWcG/2CaAJ/tKlJSnm7RTTHHATQAnwAFKWCn/H3y2eH2L2ZfDIf06rXD8m768l//cAvzN/kBe709a8cPFQ4jXFA8hHpvVh1D9scmrqfbYrD/oO0s5caYrDvraqwlwW3811V6mvXUrLtOq6x+NYCt0vIqv/2hgcUPWqoFFRixlB9tEIxZHWKHJLmuGQraifijUMTbIq63QzDLGrh+8wVYO3rI6nzdohc+81H3cDHiijxvNfAJ9Wv855hJL5nnlB2Tw8ojzC7UelrXqk/cPn233eGpGsfAAAAAASUVORK5CYII=')
 
 /**
  * @class
@@ -131,7 +133,7 @@ class Stage {
     }
 
     reloadAssets(callback) {
-        Object.values(this.assets).forEach(a => {
+        Object.values(this.assets).filter(a => a.location).forEach(a => {
             TextureCache[path.join(this.assetsPath, a.location)] =
                 Texture.fromImage(path.join(this.assetsPath, a.location))
         })
@@ -307,7 +309,11 @@ class Stage {
     }
 
     getAsset(container, asset) {
-        let sprite
+        let sprite        
+        container.x = asset.x
+        container.y = asset.y
+        container.rotation = asset.rotation
+        container.asset = asset
         if (this.assets[asset.id]) {
             let assetData = this.assets[asset.id]
             if (assetData.type === "animated") {
@@ -323,6 +329,13 @@ class Stage {
                 sprite = new PIXI.extras.AnimatedSprite(textures)
                 sprite.animationSpeed = 20 / assetData.delay
                 sprite.play()
+            } else if (assetData.type === 'particles') {
+                const image = assetData.location ? TextureCache[path.join(this.assetsPath, assetData.location)] : defaultParticle
+                sprite = new Emitter(container, [image], assetData.emitter)
+                sprite.emit = true
+                container.scale.set(asset.scaleX, asset.scaleY)
+                container.emitter = sprite
+                return container
             } else sprite = new Sprite(TextureCache[path.join(this.assetsPath, assetData.location)])
         } else {
             sprite = new Sprite()
@@ -331,15 +344,16 @@ class Stage {
         sprite.scale.set(asset.scaleX, asset.scaleY)
         sprite.anchor.set(.5, .5)
         container.addChild(sprite)
-        container.x = asset.x
-        container.y = asset.y
-        container.rotation = asset.rotation
-        container.asset = asset
         return container
     }
 
     update(delta) {
         this.puppets.forEach(puppet => {
+            let particles = puppet.particles.filter(emitter => emitter.emit || emitter._activeParticlesFirst)
+            if (particles.length) {
+                this.dirty = true
+                particles.forEach(p => p.update(delta / 1000))
+            }
             // Movement animations
             // I've tried to emulate what puppet pals does as closely as possible
             // But frankly it's difficult to tell

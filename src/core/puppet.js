@@ -93,6 +93,7 @@ class Puppet {
         this.mouthBabbleDuration = puppet.mouthBabbleDuration || 270
         this.direction = 0
         this.head = []
+        this.particles = []
         this.emotes = { }
 
         // Construct Puppet
@@ -201,7 +202,10 @@ class Puppet {
             (layer.children ? layer : this.stage.assets[layer.id].layers).children.forEach(child =>
                 container.addChild(this.createLayer(child, inh)))
         } else {
-            container.addChild(this.stage.getAsset(container, layer))
+            let sprite = this.stage.getAsset(container, layer)
+            container.addChild(sprite)
+            if (layer.id in this.stage.assets && this.stage.assets[layer.id].type === 'particles')
+                this.particles.push(sprite.emitter)
         }
 
         // Set up the enter animation, if the layer has one
