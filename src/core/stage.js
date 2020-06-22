@@ -198,6 +198,7 @@ class Stage {
     }
 
     updateEnvironment() {
+        this.renderer.view.style.backgroundColor = this.environment.color
         while (this.foreground.children[0])
             this.foreground.removeChildAt(0)
         while (this.background.children[0])
