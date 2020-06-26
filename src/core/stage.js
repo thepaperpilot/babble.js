@@ -369,17 +369,26 @@ class Stage {
                 // We want to do a bit of animation when they arrive at the target slot. 
                 //  in order to do that we have part of the animation (0 - .6) be for each slot
                 //  and the rest (.6 - 1) only plays at the destination slot
-                if (puppet.movingAnim >= 0.6 && puppet.movingAnim - delta / (1000 * MOVE_DURATION) < 0.6) {
+                while (puppet.position != puppet.target && puppet.movingAnim >= 0.6) {
                     // Once we pass .6, update our new slot position
                     puppet.position += puppet.direction
-                    puppet.direction = 0
-                    // If we're not at the final slot yet, reset the animation
-                    if (puppet.position != puppet.target) puppet.movingAnim = 0
-                    else puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.environment.puppetScale || 1)
-                } else if (puppet.movingAnim >= 1) {
+
+                    // Check if we're at the final slot yet
+                    if (puppet.position == puppet.target) {
+                        puppet.direction = 0
+                        puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.environment.puppetScale || 1)
+                    } else {
+                        // Otherwise remove .6 from the animation
+                        puppet.movingAnim -= 0.6
+                    }
+                }
+                // Check if we're done animating
+                if (puppet.movingAnim >= 1) {
                     puppet.movingAnim = 0
                     puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.environment.puppetScale || 1)
-                } else if (puppet.movingAnim < 0.6) puppet.container.scale.x = puppet.direction * (this.environment.puppetScale || 1)
+                } else if (puppet.movingAnim < 0.6)
+                    // If we're still animating make our rotation based on direction rather than puppet.facingLeft
+                    puppet.container.scale.x = puppet.direction * (this.environment.puppetScale || 1)
 
                 // Scale in a sin formation such that it does 3 half circles per slot, plus 2 more at the end
                 puppet.container.scale.y = (1 + Math.sin((1 + puppet.movingAnim * 5) * Math.PI) / 40) * (this.environment.puppetScale || 1) 
