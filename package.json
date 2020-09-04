@@ -4,7 +4,7 @@
   "description": "A library for creating and manipulating virtual puppets",
   "main": "lib/index.js",
   "scripts": {
-    "build": "browserify index.js -o dist/babble.js -s babble",
+    "build": "browserify src/index.js -o dist/babble.js -s babble",
     "prepublish": "babel -d lib src"
   },
   "repository": {

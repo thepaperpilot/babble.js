@@ -1,802 +1,11 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.babble = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-/**
- * Cutscene Scripts:
- * Each action is a new line, ending with either a comma or a semicolon
- * Commas mean the next action gets immediately run, semicolons tell the cutscene to wait until this action is complete
- * Each line has a command and its parameters, e.g. "move josh 1 5;"
- * Some parameters are optional
- * 
- * Default commands:
- * add {name} {id} [position] [facingLeft] [emote] - adds a puppet with the given name at the given position, assigns it the given id for later reference, and optionally overrides initial state
- * set {target} {name} - changes the given puppet (using assigned ids) to a new puppet with the given name
- * remove {target} - removes a given puppet from the stage
- * delay {duration} - simply waits, should generally be used as a ";" action
- * move {target} {position} - moves puppet to a new position
- * babble {target} [start/stop/toggle] - makes a puppet start or stop babbling. Default is toggle
- * emote {target} [emote] - makes a puppet switch to a given emote. Default is 'default'
- * jiggle {target} - causes a given puppet to jiggle
- *
- * Actions are defined in the cutscene's "actions" object. You can add functions to that object to add custom actions.
- * The function will be passed a callback function to be called when the action is complete, as well as any parameters passed to the action
- * You can use `this` to access references to the stage and actors
- *
- * To start the cutscene, just call cutscene.start()
- *
- * @class
- */
-class Cutscene {
-
-    /**
-     * @param {Stage} stage - the stage this puppet will be attached to
-     * @param {string} script - the script for the cutscene
-     * @param {Object} actors - dictionary of actors (e.g. each member is "name": Character)
-     * @param {requestCallback} callback - function to be called after cutscene finishes (either successfully or after an error)
-     */
-    constructor(stage, script, actors, callback) {
-        this.stage = stage
-        this.actors = actors
-
-        this.start = function() {this.parseNextAction(script.split("\n"), callback)}
-
-        this.actions = {
-            add: function(callback, name, id, position, facingLeft, emote) {
-                // Copy our actor from our actors object
-                let actor = JSON.parse(JSON.stringify(this.actors[name]))
-                
-                // If optional parameters are set, apply them to our actor
-                if (typeof position !== 'undefined' && position !== null) actor.position = parseInt(position)
-                if (typeof facingLeft !== 'undefined' && facingLeft !== null) actor.facingLeft = facingLeft == "true"
-                if (typeof emote !== 'undefined' && emote !== null) actor.emote = emote
-
-                // Add our actor to the stage
-                this.stage.addPuppet(actor, id)
-                callback()
-            },
-            set: function(callback, target, name) {
-                this.stage.setPuppet(target, this.stage.createPuppet(this.actors[name]))
-                callback()
-            },
-            remove: function(callback, target) {
-                this.stage.removePuppet(target)
-                callback()
-            },
-            delay: function(callback, duration) {
-                if (duration <= 0) requestAnimationFrame(callback)
-                else {
-                    let timer = PIXI.timerManager.createTimer(parseInt(duration))
-                    timer.on('end', callback)
-                    timer.start()
-                }
-            },
-            move: function(callback, target, position) {
-                let puppet = this.stage.getPuppet(target)
-                puppet.target = parseInt(position)
-                puppet.movingAnim = 0
-                if (position > puppet.position) {
-                    puppet.facingLeft = false
-                    puppet.container.scale.x = 1
-                } else if (position != puppet.position) {
-                    puppet.facingLeft = true
-                    puppet.container.scale.x = -1
-                }
-                this.actions.delay(callback, (Math.abs(puppet.target - puppet.position) * this.stage.MOVE_DURATION * 0.6 + this.stage.MOVE_DURATION * 0.4) * 1000)
-            },
-            babble: function(callback, target, action) {
-                let puppet = this.stage.getPuppet(target)
-                let babble = (action || "toggle") === "toggle" ? !puppet.babbling : action === "start"
-                puppet.setBabbling(babble)
-                callback()
-            },
-            emote: function(callback, target, emote) {
-                this.stage.getPuppet(target).changeEmote(emote || "default")
-                callback()
-            },
-            jiggle: function(callback, target) {
-                this.stage.getPuppet(target).jiggle()
-                callback()
-            }
-        }
-    }
-
-    parseNextAction(script, callback) {
-        // Remove any empty lines from the script
-        while (script.length > 0 && script[0].trim() === "") {
-            script.splice(0, 1)
-        }
-
-        // Check if script is complete
-        if (script.length === 0) {
-            // Cutscene finished successully
-            if (callback) requestAnimationFrame(callback)
-            return
-        }
-
-        if (script[0].trim().charAt(0) === '(') {
-            for (let i = 0; i < script.length; i++) {
-                if (script[i].trim().length > 1 && script[i].trim().charAt(script[i].trim().length - 2) === ')') {
-                    let eol = script[i].trim().charAt(script[i].trim().length - 1)
-                    script[0] = script[0].trim().substring(1)
-                    script[i] = script[i].trim().substring(0, script[i].trim().length - 2)
-                    let newCallback = function() {
-                        this.parseNextAction(script.slice(i + 1), callback)
-                    }.bind(this)
-                    if (eol === ';') {
-                        this.parseNextAction(script.slice(0, i + 1), newCallback)
-                    } else if (eol === ',') {
-                        this.parseNextAction(script.slice(0, i + 1), this.empty)
-                        requestAnimationFrame(newCallback)
-                    } else break;
-                    return;
-                }
-            }
-        }
-
-        // Parse current line of script
-        let eol = script[0].trim().charAt(script[0].trim().length - 1)
-        let action = script[0].trim()
-        action = action.substring(0, action.length - 1)
-        let command = action.split(" ")[0]
-        let parameters = action.split(" ").slice(1)
-
-        // Confirm command exists
-        if (this.actions[command] === null) {
-            // Invalid command
-            if (callback) requestAnimationFrame(callback)
-        }
-
-        // Run action
-        switch (eol) {
-            default:
-                // Invalid end of line, stop the cutscene
-                if (callback) requestAnimationFrame(callback)
-                break
-            case ';':
-                // Complete this action before proceeding
-                let newCallback = function() {
-                    this.parseNextAction(script.slice(1), callback)
-                }.bind(this)
-                this.actions[command].call(this, newCallback, ...parameters)
-                break
-            case ',':
-                // Perform this action and immediately continue
-                this.actions[command].call(this, this.empty, ...parameters)
-                this.parseNextAction(script.slice(1), callback)
-                break
-        }
-    }
-
-    // Used for callbacks that don't need to do anything. 
-    // Used so actions don't need to deal with undefined or null callbacks, 
-    //  and to not mess up the parameter order
-    empty() {}
-}
-
-module.exports = Cutscene
-
-},{}],2:[function(require,module,exports){
-// imports
-const PIXI = require('pixi.js')
-
-// Aliases
-let Container = PIXI.Container
-
-/**
- * @class
- */
-class Puppet {
-
-    /**
-     * @param {Stage} stage - the stage this puppet will be attached to
-     * @param {Object} puppet - object with all the data to construct the puppet
-     * @param {number} id - UUID to refer to this puppet later
-     */
-    constructor(stage, puppet, id) {
-        // Init Variables
-        this.babbling = false
-        this.stage = stage
-        this.id = id
-        this.container = new Container()
-        this.position = this.target = puppet.position
-        this.facingLeft = puppet.facingLeft
-        this.eyes = puppet.eyes
-        this.mouths = puppet.mouths
-        this.deadbonesStyle = puppet.deadbonesStyle
-        this.movingAnim = this.eyesAnim = this.mouthAnim = this.deadbonesAnim = 0
-        this.eyesDuration = this.mouthDuration = this.deadbonesDuration = 0
-        this.deadbonesTargetY = this.deadbonesStartY = 0
-        this.deadbonesTargetRotation = this.deadbonesStartRotation = 0
-        this.eyeBabbleDuration = puppet.eyeBabbleDuration || 2000
-        this.mouthBabbleDuration = puppet.mouthBabbleDuration || 270
-
-        // Construct Puppet
-        this.body = new Container()
-        for (let i = 0; i < puppet.body.length; i++) {
-            this.body.addChild(stage.getAsset(puppet.body[i], 'body'))
-        }
-        this.container.addChild(this.body)
-
-        this.head = new Container()
-        this.headBase = new Container()
-        for (let i = 0; i < puppet.head.length; i++) {
-            this.headBase.addChild(stage.getAsset(puppet.head[i], 'headBase'))
-        }
-        this.head.addChild(this.headBase)
-        this.emotes = {}
-        this.mouthsContainer = new Container()
-        this.eyesContainer = new Container()
-        for (let i = 0; i < puppet.emotes.length; i++) {
-            let emote = puppet.emotes[i]
-            this.emotes[i] = {
-                "mouth": new Container(),
-                "eyes": new Container(),
-                enabled: emote.enabled,
-                name: emote.name
-            }
-            this.mouthsContainer.addChild(this.emotes[i].mouth)
-            this.eyesContainer.addChild(this.emotes[i].eyes)
-            for (let j = 0; j < puppet.emotes[i].mouth.length; j++) {
-                this.emotes[i].mouth.addChild(stage.getAsset(puppet.emotes[i].mouth[j], 'mouth', i))
-            }
-            for (let j = 0; j < puppet.emotes[i].eyes.length; j++) {
-                this.emotes[i].eyes.addChild(stage.getAsset(puppet.emotes[i].eyes[j], 'eyes', i))
-            }
-        }
-        this.head.addChild(this.mouthsContainer)
-        this.head.addChild(this.eyesContainer)
-        this.hat = new Container()
-        for (let i = 0; i < puppet.hat.length; i++) {
-            this.hat.addChild(stage.getAsset(puppet.hat[i], 'hat'))
-        }
-        this.head.addChild(this.hat)
-        this.head.pivot.y = - this.headBase.height / 2
-        this.head.y = - this.headBase.height / 2
-        this.deadbonesTargetY = this.deadbonesStartY = - this.headBase.height / 2
-        this.container.addChild(this.head)
-
-        this.props = new Container()
-        for (let i = 0; i < puppet.props.length; i++) {
-            this.props.addChild(stage.getAsset(puppet.props[i], 'props'))
-        }
-        this.container.addChild(this.props)
-
-        // Finish Setup
-        this.changeEmote(puppet.emote)
-
-        // Place Puppet on Stage
-        this.container.interactive = true
-        this.container.puppet = puppet
-        this.container.y = stage.screen.clientHeight / stage.puppetStage.scale.y
-        this.container.x = (this.position - 0.5) * stage.slotWidth
-        this.container.scale.x = this.container.scale.y = (stage.project.puppetScale || 1) 
-        this.container.scale.x *= this.facingLeft ? -1 : 1
-    }
-
-    changeEmote(emote) {
-        this.emote = emote || '0'
-        let emotes = Object.keys(this.emotes)
-        for (let i = 0; i < emotes.length; i++) {
-            this.emotes[emotes[i]].mouth.visible = false
-            this.emotes[emotes[i]].eyes.visible = false
-        }
-        if (emote && this.emotes[emote].enabled) {
-            this.emotes[emote].mouth.visible = true
-            this.emotes[emote].eyes.visible = true
-        } else {
-            this.emotes['0'].mouth.visible = true
-            this.emotes['0'].eyes.visible = true
-        }
-    }
-
-    // TODO replace these with a `move(amount)` function, that accepts negative values
-
-    moveLeft() {
-        if (this.target > this.position) return
-        if (this.facingLeft || this.position === 0 || this.position == this.stage.project.numCharacters + 1) {
-            this.target--
-            this.facingLeft = true
-            this.container.scale.x = -1 * (this.stage.project.puppetScale || 1)
-        } else {
-            this.facingLeft = true
-            this.container.scale.x = -1 * (this.stage.project.puppetScale || 1)
-        }
-    }
-
-    moveRight() {
-        if (this.target < this.position) return
-        if (!this.facingLeft || this.position === 0 || this.position == this.stage.project.numCharacters + 1) {
-            this.target++
-            this.facingLeft = false
-            this.container.scale.x = 1 * (this.stage.project.puppetScale || 1)
-        } else {
-            this.facingLeft = false
-            this.container.scale.x = 1 * (this.stage.project.puppetScale || 1)
-        }
-    }
-
-    setBabbling(babble) {
-        // Babbling will be triggered by holding down a button,
-        //  which could end up calling this function a bunch
-        //  so only do anything if we're actually changing the value
-        if (this.babbling == babble) return
-        this.babbling = babble
-
-        if (!babble) {
-            this.changeEmote(this.emote)
-
-            if (this.deadbonesStyle) {
-                this.deadbonesAnim = 0
-                this.deadbonesDuration = 100
-                this.deadbonesTargetY = - this.headBase.height / 2
-                this.deadbonesTargetRotation = 0
-                this.deadbonesStartY = this.head.y
-                this.deadbonesStartRotation = this.head.rotation
-            }
-        }
-    }
-
-    jiggle() {
-        if (this.movingAnim === 0) this.movingAnim = 0.6
-    }
-
-    addEmote(emote) {
-        if (this.emotes[emote]) return
-        this.emotes[emote] = {
-            "mouth": new Container(),
-            "eyes": new Container()
-        }
-        this.mouthsContainer.addChild(this.emotes[emote].mouth)
-        this.eyesContainer.addChild(this.emotes[emote].eyes)
-    }
-
-    applyToAsset(id, callback) {
-        let character = this.container.puppet
-        let topLevel = ["body", "head", "hat", "props"]
-
-        for (let j = 0; j < topLevel.length; j++)
-            for (let k = 0; k < character[topLevel[j]].length; k++)
-                if (character[topLevel[j]][k].id === id)
-                    callback(character[topLevel[j]][k], this[topLevel[j] === "head" ? "headBase" : topLevel[j]].children[k])
-                
-        let emotes = Object.keys(character.emotes)
-        for (let j = 0; j < emotes.length; j++) {
-            for (let k = 0; k < character.emotes[emotes[j]].eyes.length; k++)
-                if (character.emotes[emotes[j]].eyes[k].id === id)
-                    callback(character.emotes[emotes[j]].eyes[k], this.emotes[emotes[j]].eyes.children[k])
-            for (let k = 0; k < character.emotes[emotes[j]].mouth.length; k++)
-                if (character.emotes[emotes[j]].mouth[k].id === id)
-                    callback(character.emotes[emotes[j]].mouth[k], this.emotes[emotes[j]].mouth.children[k])
-        }
-    }
-}
-
-module.exports = Puppet
-
-},{"pixi.js":146}],3:[function(require,module,exports){
-// imports
-const PIXI = require('pixi.js')
-window.PIXI = PIXI;
-window.PIXI[ "default" ] = PIXI;
-const timer = require('pixi-timer')
-const Puppet = require('./puppet')
-const path = require('path')
-const trim = require('./../util/trimCanvas')
-
-// Constants
-const MOVE_DURATION = 0.75 // in seconds
-
-// Aliases
-let BaseTextureCache = PIXI.utils.BaseTextureCache,
-    Container = PIXI.Container,
-    Sprite = PIXI.Sprite,
-    Texture = PIXI.Texture,
-    TextureCache = PIXI.utils.TextureCache,
-    autoDetectRenderer = PIXI.autoDetectRenderer,
-    loader = PIXI.loader,
-    Rectangle = PIXI.Rectangle,
-    ticker = PIXI.ticker
-
-/**
- * @class
- */
-class Stage {
-
-    /**
-     * @param {string} element - the id of the DOM element to append the stage to
-     * @param {Object} project - object with information on the assets, puppets, and stage settings
-     * @param {Object[]} assets - array of assets
-     * @param {string} assetsPath - path to the assets folder
-     * @param {requestCallback} callback - function to be called after assets are loaded
-     * @param {Object} [status] - object for logging stuff
-     * @param {boolean} [enabled=true] - whether or not it should start updating from the start
-     */
-    constructor(element, project, assets, assetsPath, callback, status, enabled) {
-        this.project = project
-        this.assets = assets
-        this.assetsPath = assetsPath
-        this.status = status
-        this.MOVE_DURATION = MOVE_DURATION
-        this.enabled = enabled === undefined ? true : enabled
-
-        // Create some basic objects
-        this.stage = new Container()
-        this.puppetStage = new Container()
-        this.stage.addChild(this.puppetStage)
-        this.renderer = autoDetectRenderer(1, 1, {transparent: true})
-        this.screen = document.getElementById(element)
-        this.screen.appendChild(this.renderer.view)
-        
-        this.lastFrame = new Date()
-        this.puppets = []
-        this.listeners = []
-
-        // Make the game fit the entire window
-        this.renderer.view.style.position = "absolute";
-        this.renderer.view.style.display = "block";
-
-        // Load Assets
-        let texturesToLoad = false
-        let keys = Object.keys(assets)
-        for (let i = 0; i < keys.length; i++) {
-            if (!TextureCache[path.join(assetsPath, assets[keys[i]].location)]) {
-                loader.add(path.join(assetsPath, assets[keys[i]].location))
-                texturesToLoad = true
-            }
-        }
-        let stage = this
-        if (texturesToLoad) {
-            loader.onComplete.once(function() { 
-                stage.resize()
-                if (callback) callback(stage)
-                stage.gameLoop()
-            })
-            loader.load()
-        } else {
-            loader.load()
-            stage.resize()
-            if (callback) callback(stage)
-            stage.gameLoop()
-        }
-    }
-
-    registerPuppetListener(event, callback) {
-        this.listeners.push({"event": event, "callback": callback})
-        for (let i = 0; i < this.puppets.length; i++)
-            this.puppets[i].container.on(event, callback)
-    }
-
-    addAsset(id, asset, callback) {
-        this.assets[id] = asset
-        TextureCache[path.join(this.assetsPath, asset.location)] = Texture.fromImage(path.join(this.assetsPath, asset.location + "?random=" + new Date()))
-        if (callback)
-            TextureCache[path.join(this.assetsPath, asset.location)].baseTexture.on('loaded', callback)
-    }
-
-    reloadAssets(callback) {
-        let assets = Object.keys(TextureCache)
-        for (let i = 0; i < assets.length; i++) {
-            TextureCache[assets[i]].destroy(true)
-        }
-
-        // Load Assets
-        let keys = Object.keys(this.assets)
-        for (let i = 0; i < keys.length; i++) {
-            if (!TextureCache[path.join(this.assetsPath, this.assets[keys[i]].location)]) {
-                TextureCache[path.join(this.assetsPath, this.assets[keys[i]].location)] = Texture.fromImage(path.join(this.assetsPath, this.assets[keys[i]].location))
-            }
-        }
-        let stage = this
-        let onLoad = () => {
-            let done = true
-            let assets = Object.keys(BaseTextureCache)
-            for (let i = 0; i < assets.length; i++)
-                if (BaseTextureCache[assets[i]].isLoading)
-                    done = false
-            if (done) {
-                callback(stage)
-                ticker.shared.remove(onLoad)
-            }
-        }
-
-        this.reloadPuppets()
-        if (callback) {
-            ticker.shared.add(onLoad)
-        }
-    }
-
-    updateAsset(id) {
-        let stage = this
-        let callback = function(asset, sprite) {
-            let parent = sprite.parent
-            let index = parent.getChildIndex(sprite)
-            let newAsset = stage.getAsset(asset)
-            newAsset.layer = asset.layer
-            newAsset.emote = asset.emote
-            parent.removeChildAt(index)
-            parent.addChildAt(newAsset, index)
-        }
-        for (let i = 0; i < this.puppets.length; i++) {
-            this.puppets[i].applyToAsset(id, callback)
-        }
-    }
-
-    reloadPuppets() {
-        for (let i = 0; i < this.puppets.length; i++)
-            this.setPuppet(this.puppets[i].id, this.createPuppet(this.puppets[i].container.puppet))
-    }
-
-    reattach(element) {
-        this.screen = document.getElementById(element)
-        this.screen.appendChild(this.renderer.view)
-        this.resize()
-    }
-
-    resize(e, width, height) {
-        this.bounds = {
-            width: width || this.screen.clientWidth,
-            height: height || this.screen.clientHeight
-        }
-        this.renderer.resize(this.bounds.width, this.bounds.height)
-        this.slotWidth = this.bounds.width / this.project.numCharacters
-        if (this.slotWidth < 400) {
-            this.puppetStage.scale.x = this.puppetStage.scale.y = this.slotWidth / 400
-            this.slotWidth = 400
-        } else this.puppetStage.scale.x = this.puppetStage.scale.y = 1
-        for (let i = 0; i < this.puppets.length; i++) {
-            let puppet = this.puppets[i]
-            if (puppet.position > this.project.numCharacters + 1 || puppet.target > this.project.numCharacters + 1) {
-                puppet.position = puppet.target = this.project.numCharacters + 1
-                puppet.movingAnim = 0
-            }
-            puppet.container.scale.x = puppet.container.scale.y = (this.project.puppetScale || 1) 
-            puppet.container.scale.x *= puppet.facingLeft ? -1 : 1
-            puppet.container.y = this.bounds.height / this.puppetStage.scale.y
-            puppet.container.x = puppet.position <= 0 ? - Math.abs(puppet.container.width) / 2 :                       // Starting left of screen
-                                 puppet.position >= this.project.numCharacters + 1 ? 
-                                 this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) / 2 :  // Starting right of screen
-                                 (puppet.position - 0.5) * this.slotWidth                                              // Starting on screen
-        }
-    }
-
-    createPuppet(puppet) {
-        return new Puppet(this, puppet, -1)
-    }
-
-    addPuppet(puppet, id) {
-        let newPuppet = new Puppet(this, puppet, id)
-        this.puppets.push(newPuppet)
-        this.puppetStage.addChild(newPuppet.container)
-        for (let i = 0; i < this.listeners.length; i++)
-            newPuppet.container.on(this.listeners[i].event, this.listeners[i].callback)
-        newPuppet.container.y = this.bounds.height / this.puppetStage.scale.y
-        newPuppet.container.x = newPuppet.position <= 0 ? - Math.abs(newPuppet.container.width) / 2 :                       // Starting left of screen
-                                newPuppet.position >= this.project.numCharacters + 1 ? 
-                                this.project.numCharacters * this.slotWidth + Math.abs(newPuppet.container.width) / 2 :  // Starting right of screen
-                                (newPuppet.position - 0.5) * this.slotWidth                                              // Starting on screen
-        return newPuppet
-    }
-
-    removePuppet(id) {
-        let puppet
-        for (let i = 0; i < this.puppets.length; i++)
-            if (this.puppets[i].id == id) {
-                puppet = this.puppets[i]
-                break
-            }
-        if (puppet) {
-            this.puppets.splice(this.puppets.indexOf(puppet), 1)
-            this.puppetStage.removeChild(puppet.container)
-        }
-    }
-
-    clearPuppets() {
-        while (this.puppets.length !== 0) {
-            this.puppetStage.removeChild(this.puppets[0].container)
-            this.puppets.splice(0, 1)
-        }
-    }
-
-    getPuppet(id) {
-        for (let i = 0; i < this.puppets.length; i++)
-            if (this.puppets[i].id == id)
-                return this.puppets[i]
-    }
-
-    setPuppet(id, newPuppet) {
-        let oldPuppet = this.getPuppet(id)
-        newPuppet.changeEmote(oldPuppet.emote)
-        newPuppet.id = oldPuppet.id
-        newPuppet.position = oldPuppet.position
-        newPuppet.target = oldPuppet.target
-        newPuppet.facingLeft = oldPuppet.facingLeft
-        newPuppet.container.scale.x = (newPuppet.facingLeft ? -1 : 1) * (this.project.puppetScale || 1) 
-
-        for (let i = 0; i < this.listeners.length; i++)
-            newPuppet.container.on(this.listeners[i].event, this.listeners[i].callback)
-        newPuppet.container.y = this.bounds.height / this.puppetStage.scale.y
-        newPuppet.container.x = (newPuppet.position - 0.5) * this.slotWidth
-
-        this.puppets[this.puppets.indexOf(oldPuppet)] = newPuppet
-        this.puppetStage.removeChild(oldPuppet.container)
-        this.puppetStage.addChild(newPuppet.container)
-        this.resize()
-    }
-
-    getThumbnail() {
-        this.renderer.render(this.stage)
-        try {
-            return trim(this.renderer.plugins.extract.canvas(this.stage)).canvas.toDataURL().replace(/^data:image\/\w+;base64,/, "")
-        } catch(e) {
-            this.status.error("Failed to generate thumbnail", e)
-            return null
-        }
-    }
-
-    gameLoop() {
-        let thisFrame = new Date()
-        let delta = thisFrame - this.lastFrame
-        this.lastFrame = thisFrame
-
-        requestAnimationFrame(this.gameLoop.bind(this))
-        if (this.enabled) this.update(delta)
-    }
-
-    getAsset(asset, layer, emote) {
-        let sprite
-        if (this.assets[asset.id]) {
-            let assetData = this.assets[asset.id]
-            if (assetData.type === "animated") {
-                let base = BaseTextureCache[path.join(this.assetsPath, assetData.location)]
-                let textures = []
-                let width = base.width / assetData.cols
-                let height = base.height / assetData.rows
-                for (let i = 0; i < assetData.numFrames; i++) {
-                    if ((i % assetData.cols) * width + width > base.width || Math.floor(i / assetData.cols) * height + height > base.height) continue
-                    let rect = new Rectangle((i % assetData.cols) * width, Math.floor(i / assetData.cols) * height, width, height)
-                    textures.push(new Texture(base, rect))
-                }
-                sprite = new PIXI.extras.AnimatedSprite(textures)
-                sprite.animationSpeed = 20 / assetData.delay
-                sprite.play()
-            } else sprite = new Sprite(TextureCache[path.join(this.assetsPath, assetData.location)])
-        } else {
-            sprite = new Sprite()
-            if (this.status) this.status.log("Unable to load asset \"" + asset.id + "\"", 5, 2)
-        }
-        sprite.anchor.set(0.5)
-        sprite.x = asset.x
-        sprite.y = asset.y
-        sprite.rotation = asset.rotation
-        sprite.scale.x = asset.scaleX
-        sprite.scale.y = asset.scaleY
-        sprite.asset = asset
-        sprite.layer = layer
-        sprite.emote = emote
-        return sprite
-    }
-
-    update(delta) {
-        for (let i = 0; i < this.puppets.length; i++) {
-            let puppet = this.puppets[i]
-            // Movement animations
-            // I've tried to emulate what puppet pals does as closely as possible
-            // But frankly it's difficult to tell
-            if (puppet.target != puppet.position || puppet.movingAnim !== 0) {
-                // Whether its going left or right
-                let direction = puppet.target > puppet.position ? 1 : -1
-                // Update how far into the animation we are
-                puppet.movingAnim += delta / (1000 * MOVE_DURATION)
-
-                // We want to do a bit of animation when they arrive at the target slot. 
-                //  in order to do that we have part of the animation (0 - .6) be for each slot
-                //  and the rest (.6 - 1) only plays at the destination slot
-                if (puppet.movingAnim >= 0.6 && puppet.movingAnim - delta / (1000 * MOVE_DURATION) < 0.6) {
-                    // Once we pass .6, update our new slot position
-                    puppet.position += direction
-                    // If we're not at the final slot yet, reset the animation
-                    if (puppet.position != puppet.target) puppet.movingAnim = 0
-
-                } else if (puppet.movingAnim >= 1) puppet.movingAnim = 0
-
-                // Scale in a sin formation such that it does 3 half circles per slot, plus 2 more at the end
-                puppet.container.scale.y = (1 + Math.sin((1 + puppet.movingAnim * 5) * Math.PI) / 40) * (this.project.puppetScale || 1) 
-                // Update y value so it doesn't leave the bottom of the screen while bouncing
-                puppet.container.y = this.bounds.height / this.puppetStage.scale.y
-                // Linearly move across the slot, unless we're in the (.6 - 1) part of the animation, and ensure we're off screen even when the puppets are large
-                let interpolation = Math.min(1, puppet.movingAnim / 0.6)
-                let start = puppet.position <= 0 ? - Math.abs(puppet.container.width) / 2 :                       // Starting left of screen
-                            puppet.position >= this.project.numCharacters + 1 ? 
-                            this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) / 2 :  // Starting right of screen
-                            (puppet.position - 0.5) * this.slotWidth                                              // Starting on screen
-                let end = puppet.position + direction <= 0 ? - Math.abs(puppet.container.width / 2) :             // Ending left of screen
-                          puppet.position + direction >= this.project.numCharacters + 1 ?
-                          this.project.numCharacters * this.slotWidth + Math.abs(puppet.container.width) / 2 :    // Ending right of screen
-                          (puppet.position + direction - 0.5) * this.slotWidth                                    // Ending on screen
-                puppet.container.x = interpolation === 1 ? start : start + (end - start) * interpolation;
-
-                // Wrap Edges
-                if (puppet.target > this.project.numCharacters + 1 && puppet.position >= this.project.numCharacters + 1 && puppet.movingAnim > 0) {
-                    puppet.container.x -= (this.project.numCharacters) * this.slotWidth + Math.abs(puppet.container.width)
-                    puppet.position = 0
-                    puppet.target -= this.project.numCharacters + 1
-                }
-                if (puppet.target < 0 && puppet.position <= 0 && puppet.movingAnim > 0) {
-                    puppet.container.x += (this.project.numCharacters + 1) * this.slotWidth + Math.abs(puppet.container.width)
-                    puppet.position = this.project.numCharacters + 1
-                    puppet.target += this.project.numCharacters + 1
-                }
-            }
-            if (puppet.babbling) {
-                // Update how long each face part has been on display
-                puppet.eyesAnim += delta
-                puppet.mouthAnim += delta
-
-                // Update eyes
-                if (puppet.eyesAnim >= puppet.eyesDuration && puppet.eyes.length && (puppet.emote === '0' || !puppet.emotes[puppet.emote])) {
-                    if (puppet.emotes[puppet.emote]) puppet.emotes[puppet.emote].eyes.visible = false
-                    puppet.emotes['0'].eyes.visible = false
-                    for (let j = 0; j < puppet.eyes.length; j++) {
-                        if (puppet.emotes[puppet.eyes[j]]) puppet.emotes[puppet.eyes[j]].eyes.visible = false
-                    }
-                    let eyes = puppet.eyes[Math.floor(Math.random() * puppet.eyes.length)]
-                    puppet.emotes[puppet.emotes[eyes] ? eyes : '0'].eyes.visible = true
-                    puppet.eyesAnim = 0
-                    puppet.eyesDuration = (0.1 + Math.random()) * puppet.eyeBabbleDuration
-                }
-
-                // Update mouth
-                if (puppet.mouthAnim >= puppet.mouthDuration && puppet.mouths.length) {
-                    if (puppet.emotes[puppet.emote]) puppet.emotes[puppet.emote].mouth.visible = false
-                    puppet.emotes['0'].mouth.visible = false
-                    for (let j = 0; j < puppet.mouths.length; j++) {
-                        if (puppet.emotes[puppet.mouths[j]]) puppet.emotes[puppet.mouths[j]].mouth.visible = false
-                    }
-                    let mouth = puppet.mouths[Math.floor(Math.random() * puppet.mouths.length)]
-                    puppet.emotes[puppet.emotes[mouth] ? mouth : '0'].mouth.visible = true
-                    puppet.mouthAnim = 0
-                    puppet.mouthDuration = (0.1 + Math.random()) * puppet.mouthBabbleDuration
-                }
-            }
-            // Update DeadbonesStyle Babbling
-            // I'm not sure what Puppet Pals does, but I'm pretty sure this isn't it
-            // But I think this looks "close enough", and probably the best I'm going
-            // to get without Rob actually telling people how Puppet Pals does it
-            if (puppet.deadbonesStyle && (puppet.babbling || puppet.deadbonesDuration !== 0)) {
-                puppet.deadbonesAnim += delta
-                if (puppet.deadbonesAnim >= puppet.deadbonesDuration) {
-                    puppet.deadbonesAnim = 0
-                    if (puppet.babbling) {
-                        puppet.deadbonesDuration = 100 + Math.random() * 200
-                        puppet.deadbonesStartY = puppet.head.y = puppet.deadbonesTargetY
-                        puppet.deadbonesStartRotation = puppet.head.rotation = puppet.deadbonesTargetRotation
-                        puppet.deadbonesTargetY = Math.random() * - 20 - puppet.headBase.height / 2
-                        puppet.deadbonesTargetRotation = 0.1 - Math.random() * 0.2
-                    } else {
-                        puppet.deadbonesDuration = 0
-                        puppet.head.y = puppet.deadbonesTargetY
-                        puppet.head.rotation = puppet.deadbonesTargetRotation
-                    }
-                } else {
-                    let percent = (puppet.deadbonesAnim / puppet.deadbonesDuration) * (puppet.deadbonesAnim / puppet.deadbonesDuration)
-                    puppet.head.y = puppet.deadbonesStartY + (puppet.deadbonesTargetY - puppet.deadbonesStartY) * percent
-                    puppet.head.rotation = puppet.deadbonesStartRotation + (puppet.deadbonesTargetRotation - puppet.deadbonesStartRotation) * percent
-                }
-            }
-        }
-        this.renderer.render(this.stage)
-        PIXI.timerManager.update(delta / 1000)
-    }
-}
-
-module.exports = Stage
-
-},{"./../util/trimCanvas":194,"./puppet":2,"path":12,"pixi-timer":30,"pixi.js":146}],4:[function(require,module,exports){
 module.exports = {
     Stage: require('./core/stage.js'),
     Puppet: require('./core/puppet.js'),
     Cutscene: require('./core/cutscene.js')
 }
 
-},{"./core/cutscene.js":1,"./core/puppet.js":2,"./core/stage.js":3}],5:[function(require,module,exports){
+},{"./core/cutscene.js":193,"./core/puppet.js":194,"./core/stage.js":195}],2:[function(require,module,exports){
 /**
  * Bit twiddling hacks for JavaScript.
  *
@@ -1002,7 +211,7 @@ exports.nextCombination = function(v) {
 }
 
 
-},{}],6:[function(require,module,exports){
+},{}],3:[function(require,module,exports){
 'use strict';
 
 module.exports = earcut;
@@ -1648,7 +857,7 @@ earcut.flatten = function (data) {
     return result;
 };
 
-},{}],7:[function(require,module,exports){
+},{}],4:[function(require,module,exports){
 'use strict';
 
 var has = Object.prototype.hasOwnProperty
@@ -1961,7 +1170,7 @@ if ('undefined' !== typeof module) {
   module.exports = EventEmitter;
 }
 
-},{}],8:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 /**
  * isMobile.js v0.4.1
  *
@@ -2100,7 +1309,7 @@ if ('undefined' !== typeof module) {
 
 })(this);
 
-},{}],9:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
 'use strict';
 
 Object.defineProperty(exports, '__esModule', {
@@ -2267,7 +1476,7 @@ MiniSignal.MiniSignalBinding = MiniSignalBinding;
 exports['default'] = MiniSignal;
 module.exports = exports['default'];
 
-},{}],10:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 /*
 object-assign
 (c) Sindre Sorhus
@@ -2359,7 +1568,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
 	return to;
 };
 
-},{}],11:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 'use strict'
 
 module.exports = function parseURI (str, opts) {
@@ -2391,7 +1600,7 @@ module.exports = function parseURI (str, opts) {
   return uri
 }
 
-},{}],12:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -2619,7 +1828,7 @@ var substr = 'ab'.substr(-1) === 'b'
 ;
 
 }).call(this,require('_process'))
-},{"_process":180}],13:[function(require,module,exports){
+},{"_process":179}],10:[function(require,module,exports){
 var EMPTY_ARRAY_BUFFER = new ArrayBuffer(0);
 
 /**
@@ -2740,7 +1949,7 @@ Buffer.prototype.destroy = function(){
 
 module.exports = Buffer;
 
-},{}],14:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 
 var Texture = require('./GLTexture');
 
@@ -2967,7 +2176,7 @@ Framebuffer.createFloat32 = function(gl, width, height, data)
 
 module.exports = Framebuffer;
 
-},{"./GLTexture":16}],15:[function(require,module,exports){
+},{"./GLTexture":13}],12:[function(require,module,exports){
 
 var compileProgram = require('./shader/compileProgram'),
 	extractAttributes = require('./shader/extractAttributes'),
@@ -3060,7 +2269,7 @@ Shader.prototype.destroy = function()
 
 module.exports = Shader;
 
-},{"./shader/compileProgram":21,"./shader/extractAttributes":23,"./shader/extractUniforms":24,"./shader/generateUniformAccessObject":25,"./shader/setPrecision":29}],16:[function(require,module,exports){
+},{"./shader/compileProgram":18,"./shader/extractAttributes":20,"./shader/extractUniforms":21,"./shader/generateUniformAccessObject":22,"./shader/setPrecision":26}],13:[function(require,module,exports){
 
 /**
  * Helper class to create a WebGL Texture
@@ -3395,7 +2604,7 @@ Texture.fromData = function(gl, data, width, height)
 
 module.exports = Texture;
 
-},{}],17:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 
 // state object//
 var setVertexAttribArrays = require( './setVertexAttribArrays' );
@@ -3659,7 +2868,7 @@ VertexArrayObject.prototype.getSize = function()
     return attrib.buffer.data.length / (( attrib.stride/4 ) || attrib.attribute.size);
 };
 
-},{"./setVertexAttribArrays":20}],18:[function(require,module,exports){
+},{"./setVertexAttribArrays":17}],15:[function(require,module,exports){
 
 /**
  * Helper class to create a webGL Context
@@ -3687,7 +2896,7 @@ var createContext = function(canvas, options)
 
 module.exports = createContext;
 
-},{}],19:[function(require,module,exports){
+},{}],16:[function(require,module,exports){
 var gl = {
     createContext:          require('./createContext'),
     setVertexAttribArrays:  require('./setVertexAttribArrays'),
@@ -3714,7 +2923,7 @@ if (typeof window !== 'undefined')
     window.PIXI.glCore = gl;
 }
 
-},{"./GLBuffer":13,"./GLFramebuffer":14,"./GLShader":15,"./GLTexture":16,"./VertexArrayObject":17,"./createContext":18,"./setVertexAttribArrays":20,"./shader":26}],20:[function(require,module,exports){
+},{"./GLBuffer":10,"./GLFramebuffer":11,"./GLShader":12,"./GLTexture":13,"./VertexArrayObject":14,"./createContext":15,"./setVertexAttribArrays":17,"./shader":23}],17:[function(require,module,exports){
 // var GL_MAP = {};
 
 /**
@@ -3771,7 +2980,7 @@ var setVertexAttribArrays = function (gl, attribs, state)
 
 module.exports = setVertexAttribArrays;
 
-},{}],21:[function(require,module,exports){
+},{}],18:[function(require,module,exports){
 
 /**
  * @class
@@ -3853,7 +3062,7 @@ var compileShader = function (gl, type, src)
 
 module.exports = compileProgram;
 
-},{}],22:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 /**
  * @class
  * @memberof PIXI.glCore.shader
@@ -3933,7 +3142,7 @@ var booleanArray = function(size)
 
 module.exports = defaultValue;
 
-},{}],23:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 
 var mapType = require('./mapType');
 var mapSize = require('./mapSize');
@@ -3976,7 +3185,7 @@ var pointer = function(type, normalized, stride, start){
 
 module.exports = extractAttributes;
 
-},{"./mapSize":27,"./mapType":28}],24:[function(require,module,exports){
+},{"./mapSize":24,"./mapType":25}],21:[function(require,module,exports){
 var mapType = require('./mapType');
 var defaultValue = require('./defaultValue');
 
@@ -4013,7 +3222,7 @@ var extractUniforms = function(gl, program)
 
 module.exports = extractUniforms;
 
-},{"./defaultValue":22,"./mapType":28}],25:[function(require,module,exports){
+},{"./defaultValue":19,"./mapType":25}],22:[function(require,module,exports){
 /**
  * Extracts the attributes
  * @class
@@ -4156,7 +3365,7 @@ var GLSL_TO_ARRAY_SETTERS = {
 
 module.exports = generateUniformAccessObject;
 
-},{}],26:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 module.exports = {
     compileProgram: require('./compileProgram'),
     defaultValue: require('./defaultValue'),
@@ -4167,7 +3376,7 @@ module.exports = {
     mapSize: require('./mapSize'),
     mapType: require('./mapType')
 };
-},{"./compileProgram":21,"./defaultValue":22,"./extractAttributes":23,"./extractUniforms":24,"./generateUniformAccessObject":25,"./mapSize":27,"./mapType":28,"./setPrecision":29}],27:[function(require,module,exports){
+},{"./compileProgram":18,"./defaultValue":19,"./extractAttributes":20,"./extractUniforms":21,"./generateUniformAccessObject":22,"./mapSize":24,"./mapType":25,"./setPrecision":26}],24:[function(require,module,exports){
 /**
  * @class
  * @memberof PIXI.glCore.shader
@@ -4205,7 +3414,7 @@ var GLSL_TO_SIZE = {
 
 module.exports = mapSize;
 
-},{}],28:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 
 
 var mapSize = function(gl, type) 
@@ -4253,7 +3462,7 @@ var GL_TO_GLSL_TYPES = {
 
 module.exports = mapSize;
 
-},{}],29:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 /**
  * Sets the float precision on the shader. If the precision is already present this function will do nothing
  * @param {string} src       the shader source
@@ -4273,10 +3482,1964 @@ var setPrecision = function(src, precision)
 
 module.exports = setPrecision;
 
-},{}],30:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
+/*!
+ * pixi-particles - v4.2.0
+ * Compiled Sat, 26 Oct 2019 14:40:23 UTC
+ *
+ * pixi-particles is licensed under the MIT License.
+ * http://www.opensource.org/licenses/mit-license
+ */
+'use strict';
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+var pixi = require('pixi.js');
+
+/**
+ * A single node in a PropertyList.
+ */
+var PropertyNode = /** @class */ (function () {
+    /**
+     * @param value The value for this node
+     * @param time The time for this node, between 0-1
+     * @param [ease] Custom ease for this list. Only relevant for the first node.
+     */
+    function PropertyNode(value, time, ease) {
+        this.value = value;
+        this.time = time;
+        this.next = null;
+        this.isStepped = false;
+        if (ease) {
+            this.ease = typeof ease == "function" ? ease : exports.ParticleUtils.generateEase(ease);
+        }
+        else {
+            this.ease = null;
+        }
+    }
+    /**
+     * Creates a list of property values from a data object {list, isStepped} with a list of objects in
+     * the form {value, time}. Alternatively, the data object can be in the deprecated form of
+     * {start, end}.
+     * @param data The data for the list.
+     * @param data.list The array of value and time objects.
+     * @param data.isStepped If the list is stepped rather than interpolated.
+     * @param data.ease Custom ease for this list.
+     * @return The first node in the list
+     */
+    PropertyNode.createList = function (data) {
+        if ("list" in data) {
+            var array = data.list;
+            var node = void 0, first = void 0;
+            var _a = array[0], value = _a.value, time = _a.time;
+            first = node = new PropertyNode(typeof value === 'string' ? exports.ParticleUtils.hexToRGB(value) : value, time, data.ease);
+            //only set up subsequent nodes if there are a bunch or the 2nd one is different from the first
+            if (array.length > 2 || (array.length === 2 && array[1].value !== value)) {
+                for (var i = 1; i < array.length; ++i) {
+                    var _b = array[i], value_1 = _b.value, time_1 = _b.time;
+                    node.next = new PropertyNode(typeof value_1 === 'string' ? exports.ParticleUtils.hexToRGB(value_1) : value_1, time_1);
+                    node = node.next;
+                }
+            }
+            first.isStepped = !!data.isStepped;
+            return first;
+        }
+        else {
+            //Handle deprecated version here
+            var start = new PropertyNode(typeof data.start === 'string' ? exports.ParticleUtils.hexToRGB(data.start) : data.start, 0);
+            //only set up a next value if it is different from the starting value
+            if (data.end !== data.start)
+                start.next = new PropertyNode(typeof data.end === 'string' ? exports.ParticleUtils.hexToRGB(data.end) : data.end, 1);
+            return start;
+        }
+    };
+    return PropertyNode;
+}());
+
+// get Texture.from()/Texture.fromImage(), in V4 and V5 friendly methods
+/**
+ * @hidden
+ */
+var TextureFromString;
+// to avoid Rollup transforming our import, save pixi namespace in a variable
+var pixiNS = pixi;
+if (parseInt(/^(\d+)\./.exec(pixi.VERSION)[1]) < 5) {
+    TextureFromString = pixiNS.Texture.fromImage;
+}
+else {
+    TextureFromString = pixiNS.Texture.from;
+}
+function GetTextureFromString(s) {
+    return TextureFromString(s);
+}
+(function (ParticleUtils) {
+    /**
+     * If errors and warnings should be logged within the library.
+     */
+    ParticleUtils.verbose = false;
+    ParticleUtils.DEG_TO_RADS = Math.PI / 180;
+    /**
+     * Rotates a point by a given angle.
+     * @param angle The angle to rotate by in degrees
+     * @param p The point to rotate around 0,0.
+     */
+    function rotatePoint(angle, p) {
+        if (!angle)
+            return;
+        angle *= ParticleUtils.DEG_TO_RADS;
+        var s = Math.sin(angle);
+        var c = Math.cos(angle);
+        var xnew = p.x * c - p.y * s;
+        var ynew = p.x * s + p.y * c;
+        p.x = xnew;
+        p.y = ynew;
+    }
+    ParticleUtils.rotatePoint = rotatePoint;
+    /**
+     * Combines separate color components (0-255) into a single uint color.
+     * @param r The red value of the color
+     * @param g The green value of the color
+     * @param b The blue value of the color
+     * @return The color in the form of 0xRRGGBB
+     */
+    function combineRGBComponents(r, g, b /*, a*/) {
+        return /*a << 24 |*/ r << 16 | g << 8 | b;
+    }
+    ParticleUtils.combineRGBComponents = combineRGBComponents;
+    /**
+     * Reduces the point to a length of 1.
+     * @param point The point to normalize
+     */
+    function normalize(point) {
+        var oneOverLen = 1 / ParticleUtils.length(point);
+        point.x *= oneOverLen;
+        point.y *= oneOverLen;
+    }
+    ParticleUtils.normalize = normalize;
+    /**
+     * Multiplies the x and y values of this point by a value.
+     * @param point The point to scaleBy
+     * @param value The value to scale by.
+     */
+    function scaleBy(point, value) {
+        point.x *= value;
+        point.y *= value;
+    }
+    ParticleUtils.scaleBy = scaleBy;
+    /**
+     * Returns the length (or magnitude) of this point.
+     * @param point The point to measure length
+     * @return The length of this point.
+     */
+    function length(point) {
+        return Math.sqrt(point.x * point.x + point.y * point.y);
+    }
+    ParticleUtils.length = length;
+    /**
+     * Converts a hex string from "#AARRGGBB", "#RRGGBB", "0xAARRGGBB", "0xRRGGBB",
+     * "AARRGGBB", or "RRGGBB" to an object of ints of 0-255, as
+     * {r, g, b, (a)}.
+     * @param color The input color string.
+     * @param output An object to put the output in. If omitted, a new object is created.
+     * @return The object with r, g, and b properties, possibly with an a property.
+     */
+    function hexToRGB(color, output) {
+        if (!output)
+            output = {};
+        if (color.charAt(0) == "#")
+            color = color.substr(1);
+        else if (color.indexOf("0x") === 0)
+            color = color.substr(2);
+        var alpha;
+        if (color.length == 8) {
+            alpha = color.substr(0, 2);
+            color = color.substr(2);
+        }
+        output.r = parseInt(color.substr(0, 2), 16); //Red
+        output.g = parseInt(color.substr(2, 2), 16); //Green
+        output.b = parseInt(color.substr(4, 2), 16); //Blue
+        if (alpha)
+            output.a = parseInt(alpha, 16);
+        return output;
+    }
+    ParticleUtils.hexToRGB = hexToRGB;
+    /**
+     * Generates a custom ease function, based on the GreenSock custom ease, as demonstrated
+     * by the related tool at http://www.greensock.com/customease/.
+     * @param segments An array of segments, as created by
+     * http://www.greensock.com/customease/.
+     * @return A function that calculates the percentage of change at
+     *                    a given point in time (0-1 inclusive).
+     */
+    function generateEase(segments) {
+        var qty = segments.length;
+        var oneOverQty = 1 / qty;
+        /*
+         * Calculates the percentage of change at a given point in time (0-1 inclusive).
+         * @param {Number} time The time of the ease, 0-1 inclusive.
+         * @return {Number} The percentage of the change, 0-1 inclusive (unless your
+         *                  ease goes outside those bounds).
+         */
+        return function (time) {
+            var t, s;
+            var i = (qty * time) | 0; //do a quick floor operation
+            t = (time - (i * oneOverQty)) * qty;
+            s = segments[i] || segments[qty - 1];
+            return (s.s + t * (2 * (1 - t) * (s.cp - s.s) + t * (s.e - s.s)));
+        };
+    }
+    ParticleUtils.generateEase = generateEase;
+    /**
+     * Gets a blend mode, ensuring that it is valid.
+     * @param name The name of the blend mode to get.
+     * @return The blend mode as specified in the PIXI.BLEND_MODES enumeration.
+     */
+    function getBlendMode(name) {
+        if (!name)
+            return pixi.BLEND_MODES.NORMAL;
+        name = name.toUpperCase();
+        while (name.indexOf(" ") >= 0)
+            name = name.replace(" ", "_");
+        return pixi.BLEND_MODES[name] || pixi.BLEND_MODES.NORMAL;
+    }
+    ParticleUtils.getBlendMode = getBlendMode;
+    /**
+     * Converts a list of {value, time} objects starting at time 0 and ending at time 1 into an evenly
+     * spaced stepped list of PropertyNodes for color values. This is primarily to handle conversion of
+     * linear gradients to fewer colors, allowing for some optimization for Canvas2d fallbacks.
+     * @param list The list of data to convert.
+     * @param [numSteps=10] The number of steps to use.
+     * @return The blend mode as specified in the PIXI.blendModes enumeration.
+     */
+    function createSteppedGradient(list, numSteps) {
+        if (numSteps === void 0) { numSteps = 10; }
+        if (typeof numSteps !== 'number' || numSteps <= 0)
+            numSteps = 10;
+        var first = new PropertyNode(ParticleUtils.hexToRGB(list[0].value), list[0].time);
+        first.isStepped = true;
+        var currentNode = first;
+        var current = list[0];
+        var nextIndex = 1;
+        var next = list[nextIndex];
+        for (var i = 1; i < numSteps; ++i) {
+            var lerp = i / numSteps;
+            //ensure we are on the right segment, if multiple
+            while (lerp > next.time) {
+                current = next;
+                next = list[++nextIndex];
+            }
+            //convert the lerp value to the segment range
+            lerp = (lerp - current.time) / (next.time - current.time);
+            var curVal = ParticleUtils.hexToRGB(current.value);
+            var nextVal = ParticleUtils.hexToRGB(next.value);
+            var output = {
+                r: (nextVal.r - curVal.r) * lerp + curVal.r,
+                g: (nextVal.g - curVal.g) * lerp + curVal.g,
+                b: (nextVal.b - curVal.b) * lerp + curVal.b,
+            };
+            currentNode.next = new PropertyNode(output, i / numSteps);
+            currentNode = currentNode.next;
+        }
+        //we don't need to have a PropertyNode for time of 1, because in a stepped version at that point
+        //the particle has died of old age
+        return first;
+    }
+    ParticleUtils.createSteppedGradient = createSteppedGradient;
+})(exports.ParticleUtils || (exports.ParticleUtils = {}));
+
+/*! *****************************************************************************
+Copyright (c) Microsoft Corporation. All rights reserved.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this file except in compliance with the License. You may obtain a copy of the
+License at http://www.apache.org/licenses/LICENSE-2.0
+
+THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
+WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+MERCHANTABLITY OR NON-INFRINGEMENT.
+
+See the Apache Version 2.0 License for specific language governing permissions
+and limitations under the License.
+***************************************************************************** */
+/* global Reflect, Promise */
+
+var extendStatics = function(d, b) {
+    extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return extendStatics(d, b);
+};
+
+function __extends(d, b) {
+    extendStatics(d, b);
+    function __() { this.constructor = d; }
+    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+}
+
+/**
+ * Singly linked list container for keeping track of interpolated properties for particles.
+ * Each Particle will have one of these for each interpolated property.
+ */
+var PropertyList = /** @class */ (function () {
+    /**
+     * @param isColor If this list handles color values
+     */
+    function PropertyList(isColor) {
+        if (isColor === void 0) { isColor = false; }
+        this.current = null;
+        this.next = null;
+        this.isColor = !!isColor;
+        this.interpolate = null;
+        this.ease = null;
+    }
+    /**
+     * Resets the list for use.
+     * @param first The first node in the list.
+     * @param first.isStepped If the values should be stepped instead of interpolated linearly.
+     */
+    PropertyList.prototype.reset = function (first) {
+        this.current = first;
+        this.next = first.next;
+        var isSimple = this.next && this.next.time >= 1;
+        if (isSimple) {
+            this.interpolate = this.isColor ? intColorSimple : intValueSimple;
+        }
+        else if (first.isStepped) {
+            this.interpolate = this.isColor ? intColorStepped : intValueStepped;
+        }
+        else {
+            this.interpolate = this.isColor ? intColorComplex : intValueComplex;
+        }
+        this.ease = this.current.ease;
+    };
+    return PropertyList;
+}());
+function intValueSimple(lerp) {
+    if (this.ease)
+        lerp = this.ease(lerp);
+    return (this.next.value - this.current.value) * lerp + this.current.value;
+}
+function intColorSimple(lerp) {
+    if (this.ease)
+        lerp = this.ease(lerp);
+    var curVal = this.current.value, nextVal = this.next.value;
+    var r = (nextVal.r - curVal.r) * lerp + curVal.r;
+    var g = (nextVal.g - curVal.g) * lerp + curVal.g;
+    var b = (nextVal.b - curVal.b) * lerp + curVal.b;
+    return exports.ParticleUtils.combineRGBComponents(r, g, b);
+}
+function intValueComplex(lerp) {
+    if (this.ease)
+        lerp = this.ease(lerp);
+    //make sure we are on the right segment
+    while (lerp > this.next.time) {
+        this.current = this.next;
+        this.next = this.next.next;
+    }
+    //convert the lerp value to the segment range
+    lerp = (lerp - this.current.time) / (this.next.time - this.current.time);
+    return (this.next.value - this.current.value) * lerp + this.current.value;
+}
+function intColorComplex(lerp) {
+    if (this.ease)
+        lerp = this.ease(lerp);
+    //make sure we are on the right segment
+    while (lerp > this.next.time) {
+        this.current = this.next;
+        this.next = this.next.next;
+    }
+    //convert the lerp value to the segment range
+    lerp = (lerp - this.current.time) / (this.next.time - this.current.time);
+    var curVal = this.current.value, nextVal = this.next.value;
+    var r = (nextVal.r - curVal.r) * lerp + curVal.r;
+    var g = (nextVal.g - curVal.g) * lerp + curVal.g;
+    var b = (nextVal.b - curVal.b) * lerp + curVal.b;
+    return exports.ParticleUtils.combineRGBComponents(r, g, b);
+}
+function intValueStepped(lerp) {
+    if (this.ease)
+        lerp = this.ease(lerp);
+    //make sure we are on the right segment
+    while (this.next && lerp > this.next.time) {
+        this.current = this.next;
+        this.next = this.next.next;
+    }
+    return this.current.value;
+}
+function intColorStepped(lerp) {
+    if (this.ease)
+        lerp = this.ease(lerp);
+    //make sure we are on the right segment
+    while (this.next && lerp > this.next.time) {
+        this.current = this.next;
+        this.next = this.next.next;
+    }
+    var curVal = this.current.value;
+    return exports.ParticleUtils.combineRGBComponents(curVal.r, curVal.g, curVal.b);
+}
+
+/**
+ * An individual particle image. You shouldn't have to deal with these.
+ */
+var Particle = /** @class */ (function (_super) {
+    __extends(Particle, _super);
+    /**
+     * @param {PIXI.particles.Emitter} emitter The emitter that controls this particle.
+     */
+    function Particle(emitter) {
+        var _this = 
+        //start off the sprite with a blank texture, since we are going to replace it
+        //later when the particle is initialized.
+        _super.call(this) || this;
+        _this.emitter = emitter;
+        //particles should be centered
+        _this.anchor.x = _this.anchor.y = 0.5;
+        _this.velocity = new pixi.Point();
+        _this.rotationSpeed = 0;
+        _this.rotationAcceleration = 0;
+        _this.maxLife = 0;
+        _this.age = 0;
+        _this.ease = null;
+        _this.extraData = null;
+        _this.alphaList = new PropertyList();
+        _this.speedList = new PropertyList();
+        _this.speedMultiplier = 1;
+        _this.acceleration = new pixi.Point();
+        _this.maxSpeed = NaN;
+        _this.scaleList = new PropertyList();
+        _this.scaleMultiplier = 1;
+        _this.colorList = new PropertyList(true);
+        _this._doAlpha = false;
+        _this._doScale = false;
+        _this._doSpeed = false;
+        _this._doAcceleration = false;
+        _this._doColor = false;
+        _this._doNormalMovement = false;
+        _this._oneOverLife = 0;
+        _this.next = null;
+        _this.prev = null;
+        //save often used functions on the instance instead of the prototype for better speed
+        _this.init = _this.init;
+        _this.Particle_init = Particle.prototype.init;
+        _this.update = _this.update;
+        _this.Particle_update = Particle.prototype.update;
+        _this.Sprite_destroy = _super.prototype.destroy;
+        _this.Particle_destroy = Particle.prototype.destroy;
+        _this.applyArt = _this.applyArt;
+        _this.kill = _this.kill;
+        return _this;
+    }
+    /**
+     * Initializes the particle for use, based on the properties that have to
+     * have been set already on the particle.
+     */
+    Particle.prototype.init = function () {
+        //reset the age
+        this.age = 0;
+        //set up the velocity based on the start speed and rotation
+        this.velocity.x = this.speedList.current.value * this.speedMultiplier;
+        this.velocity.y = 0;
+        exports.ParticleUtils.rotatePoint(this.rotation, this.velocity);
+        if (this.noRotation) {
+            this.rotation = 0;
+        }
+        else {
+            //convert rotation to Radians from Degrees
+            this.rotation *= exports.ParticleUtils.DEG_TO_RADS;
+        }
+        //convert rotation speed to Radians from Degrees
+        this.rotationSpeed *= exports.ParticleUtils.DEG_TO_RADS;
+        this.rotationAcceleration *= exports.ParticleUtils.DEG_TO_RADS;
+        //set alpha to inital alpha
+        this.alpha = this.alphaList.current.value;
+        //set scale to initial scale
+        this.scale.x = this.scale.y = this.scaleList.current.value;
+        //figure out what we need to interpolate
+        this._doAlpha = !!this.alphaList.current.next;
+        this._doSpeed = !!this.speedList.current.next;
+        this._doScale = !!this.scaleList.current.next;
+        this._doColor = !!this.colorList.current.next;
+        this._doAcceleration = this.acceleration.x !== 0 || this.acceleration.y !== 0;
+        //_doNormalMovement can be cancelled by subclasses
+        this._doNormalMovement = this._doSpeed || this.speedList.current.value !== 0 || this._doAcceleration;
+        //save our lerp helper
+        this._oneOverLife = 1 / this.maxLife;
+        //set the inital color
+        var color = this.colorList.current.value;
+        this.tint = exports.ParticleUtils.combineRGBComponents(color.r, color.g, color.b);
+        //ensure visibility
+        this.visible = true;
+    };
+    /**
+     * Sets the texture for the particle. This can be overridden to allow
+     * for an animated particle.
+     * @param art The texture to set.
+     */
+    Particle.prototype.applyArt = function (art) {
+        this.texture = art || pixi.Texture.EMPTY;
+    };
+    /**
+     * Updates the particle.
+     * @param delta Time elapsed since the previous frame, in __seconds__.
+     * @return The standard interpolation multiplier (0-1) used for all
+     *         relevant particle properties. A value of -1 means the particle
+     *         died of old age instead.
+     */
+    Particle.prototype.update = function (delta) {
+        //increase age
+        this.age += delta;
+        //recycle particle if it is too old
+        if (this.age >= this.maxLife || this.age < 0) {
+            this.kill();
+            return -1;
+        }
+        //determine our interpolation value
+        var lerp = this.age * this._oneOverLife; //lifetime / maxLife;
+        if (this.ease) {
+            if (this.ease.length == 4) {
+                //the t, b, c, d parameters that some tween libraries use
+                //(time, initial value, end value, duration)
+                lerp = this.ease(lerp, 0, 1, 1);
+            }
+            else {
+                //the simplified version that we like that takes
+                //one parameter, time from 0-1. TweenJS eases provide this usage.
+                lerp = this.ease(lerp);
+            }
+        }
+        //interpolate alpha
+        if (this._doAlpha)
+            this.alpha = this.alphaList.interpolate(lerp);
+        //interpolate scale
+        if (this._doScale) {
+            var scale = this.scaleList.interpolate(lerp) * this.scaleMultiplier;
+            this.scale.x = this.scale.y = scale;
+        }
+        //handle movement
+        if (this._doNormalMovement) {
+            var deltaX = void 0;
+            var deltaY = void 0;
+            //interpolate speed
+            if (this._doSpeed) {
+                var speed = this.speedList.interpolate(lerp) * this.speedMultiplier;
+                exports.ParticleUtils.normalize(this.velocity);
+                exports.ParticleUtils.scaleBy(this.velocity, speed);
+                deltaX = this.velocity.x * delta;
+                deltaY = this.velocity.y * delta;
+            }
+            else if (this._doAcceleration) {
+                var oldVX = this.velocity.x;
+                var oldVY = this.velocity.y;
+                this.velocity.x += this.acceleration.x * delta;
+                this.velocity.y += this.acceleration.y * delta;
+                if (this.maxSpeed) {
+                    var currentSpeed = exports.ParticleUtils.length(this.velocity);
+                    //if we are going faster than we should, clamp at the max speed
+                    //DO NOT recalculate vector length
+                    if (currentSpeed > this.maxSpeed) {
+                        exports.ParticleUtils.scaleBy(this.velocity, this.maxSpeed / currentSpeed);
+                    }
+                }
+                // calculate position delta by the midpoint between our old velocity and our new velocity
+                deltaX = (oldVX + this.velocity.x) / 2 * delta;
+                deltaY = (oldVY + this.velocity.y) / 2 * delta;
+            }
+            else {
+                deltaX = this.velocity.x * delta;
+                deltaY = this.velocity.y * delta;
+            }
+            //adjust position based on velocity
+            this.position.x += deltaX;
+            this.position.y += deltaY;
+        }
+        //interpolate color
+        if (this._doColor) {
+            this.tint = this.colorList.interpolate(lerp);
+        }
+        //update rotation
+        if (this.rotationAcceleration !== 0) {
+            var newRotationSpeed = this.rotationSpeed + this.rotationAcceleration * delta;
+            this.rotation += (this.rotationSpeed + newRotationSpeed) / 2 * delta;
+            this.rotationSpeed = newRotationSpeed;
+        }
+        else if (this.rotationSpeed !== 0) {
+            this.rotation += this.rotationSpeed * delta;
+        }
+        else if (this.acceleration && !this.noRotation) {
+            this.rotation = Math.atan2(this.velocity.y, this.velocity.x); // + Math.PI / 2;
+        }
+        return lerp;
+    };
+    /**
+     * Kills the particle, removing it from the display list
+     * and telling the emitter to recycle it.
+     */
+    Particle.prototype.kill = function () {
+        this.emitter.recycle(this);
+    };
+    /**
+     * Destroys the particle, removing references and preventing future use.
+     */
+    Particle.prototype.destroy = function () {
+        if (this.parent)
+            this.parent.removeChild(this);
+        this.Sprite_destroy();
+        this.emitter = this.velocity = this.colorList = this.scaleList = this.alphaList =
+            this.speedList = this.ease = this.next = this.prev = null;
+    };
+    /**
+     * Checks over the art that was passed to the Emitter's init() function, to do any special
+     * modifications to prepare it ahead of time.
+     * @param art The array of art data. For Particle, it should be an array of
+     *            Textures. Any strings in the array will be converted to
+     *            Textures via Texture.from().
+     * @return The art, after any needed modifications.
+     */
+    Particle.parseArt = function (art) {
+        //convert any strings to Textures.
+        var i;
+        for (i = art.length; i >= 0; --i) {
+            if (typeof art[i] == "string")
+                art[i] = GetTextureFromString(art[i]);
+        }
+        //particles from different base textures will be slower in WebGL than if they
+        //were from one spritesheet
+        if (exports.ParticleUtils.verbose) {
+            for (i = art.length - 1; i > 0; --i) {
+                if (art[i].baseTexture != art[i - 1].baseTexture) {
+                    if (window.console)
+                        console.warn("PixiParticles: using particle textures from different images may hinder performance in WebGL");
+                    break;
+                }
+            }
+        }
+        return art;
+    };
+    /**
+     * Parses extra emitter data to ensure it is set up for this particle class.
+     * Particle does nothing to the extra data.
+     * @param extraData The extra data from the particle config.
+     * @return The parsed extra data.
+     */
+    Particle.parseData = function (extraData) {
+        return extraData;
+    };
+    return Particle;
+}(pixi.Sprite));
+
+/**
+ * Chain of line segments for generating spawn positions.
+ */
+var PolygonalChain = /** @class */ (function () {
+    /**
+     * @param data Point data for polygon chains. Either a list of points for a single chain, or a list of chains.
+     */
+    function PolygonalChain(data) {
+        this.segments = [];
+        this.countingLengths = [];
+        this.totalLength = 0;
+        this.init(data);
+    }
+    /**
+     * @param data Point data for polygon chains. Either a list of points for a single chain, or a list of chains.
+     */
+    PolygonalChain.prototype.init = function (data) {
+        // if data is not present, set up a segment of length 0
+        if (!data || !data.length) {
+            this.segments.push({ p1: { x: 0, y: 0 }, p2: { x: 0, y: 0 }, l: 0 });
+        }
+        else {
+            if (Array.isArray(data[0])) {
+                // list of segment chains, each defined as a list of points
+                for (var i = 0; i < data.length; ++i) {
+                    // loop through the chain, connecting points
+                    var chain = data[i];
+                    var prevPoint = chain[0];
+                    for (var j = 1; j < chain.length; ++j) {
+                        var second = chain[j];
+                        this.segments.push({ p1: prevPoint, p2: second, l: 0 });
+                        prevPoint = second;
+                    }
+                }
+            }
+            else {
+                var prevPoint = data[0];
+                // list of points
+                for (var i = 1; i < data.length; ++i) {
+                    var second = data[i];
+                    this.segments.push({ p1: prevPoint, p2: second, l: 0 });
+                    prevPoint = second;
+                }
+            }
+        }
+        // now go through our segments to calculate the lengths so that we
+        // can set up a nice weighted random distribution
+        for (var i = 0; i < this.segments.length; ++i) {
+            var _a = this.segments[i], p1 = _a.p1, p2 = _a.p2;
+            var segLength = Math.sqrt((p2.x - p1.x) * (p2.x - p1.x) + (p2.y - p1.y) * (p2.y - p1.y));
+            // save length so we can turn a random number into a 0-1 interpolation value later
+            this.segments[i].l = segLength;
+            this.totalLength += segLength;
+            // keep track of the length so far, counting up
+            this.countingLengths.push(this.totalLength);
+        }
+    };
+    /**
+     * Gets a random point in the chain.
+     * @param out The point to store the selected position in.
+     */
+    PolygonalChain.prototype.getRandomPoint = function (out) {
+        // select a random spot in the length of the chain
+        var rand = Math.random() * this.totalLength;
+        var chosenSeg;
+        var lerp;
+        // if only one segment, it wins
+        if (this.segments.length === 1) {
+            chosenSeg = this.segments[0];
+            lerp = rand;
+        }
+        else {
+            // otherwise, go through countingLengths until we have determined
+            // which segment we chose
+            for (var i = 0; i < this.countingLengths.length; ++i) {
+                if (rand < this.countingLengths[i]) {
+                    chosenSeg = this.segments[i];
+                    // set lerp equal to the length into that segment (i.e. the remainder after subtracting all the segments before it)
+                    lerp = i === 0 ? rand : rand - this.countingLengths[i - 1];
+                    break;
+                }
+            }
+        }
+        // divide lerp by the segment length, to result in a 0-1 number.
+        lerp /= chosenSeg.l || 1;
+        var p1 = chosenSeg.p1, p2 = chosenSeg.p2;
+        // now calculate the position in the segment that the lerp value represents
+        out.x = p1.x + lerp * (p2.x - p1.x);
+        out.y = p1.y + lerp * (p2.y - p1.y);
+    };
+    return PolygonalChain;
+}());
+
+// get the shared ticker, in V4 and V5 friendly methods
+/**
+ * @hidden
+ */
+var ticker;
+// to avoid Rollup transforming our import, save pixi namespace in a variable
+var pixiNS$1 = pixi;
+if (parseInt(/^(\d+)\./.exec(pixi.VERSION)[1]) < 5) {
+    ticker = pixiNS$1.ticker.shared;
+}
+else {
+    ticker = pixiNS$1.Ticker.shared;
+}
+/**
+ * @hidden
+ */
+var helperPoint = new pixi.Point();
+/**
+ * A particle emitter.
+ */
+var Emitter = /** @class */ (function () {
+    /**
+     * @param particleParent The container to add the particles to.
+     * @param particleImages A texture or array of textures to use
+     *                       for the particles. Strings will be turned
+     *                       into textures via Texture.fromImage().
+     * @param config A configuration object containing settings for the emitter.
+     * @param config.emit If config.emit is explicitly passed as false, the
+     *                    Emitter will start disabled.
+     * @param config.autoUpdate If config.autoUpdate is explicitly passed as
+     *                          true, the Emitter will automatically call
+     *                          update via the PIXI shared ticker.
+     */
+    function Emitter(particleParent, particleImages, config) {
+        /**
+         * A number keeping index of currently applied image. Used to emit arts in order.
+         */
+        this._currentImageIndex = -1;
+        this._particleConstructor = Particle;
+        //properties for individual particles
+        this.particleImages = null;
+        this.startAlpha = null;
+        this.startSpeed = null;
+        this.minimumSpeedMultiplier = 1;
+        this.acceleration = null;
+        this.maxSpeed = NaN;
+        this.startScale = null;
+        this.minimumScaleMultiplier = 1;
+        this.startColor = null;
+        this.minLifetime = 0;
+        this.maxLifetime = 0;
+        this.minStartRotation = 0;
+        this.maxStartRotation = 0;
+        this.noRotation = false;
+        this.minRotationSpeed = 0;
+        this.maxRotationSpeed = 0;
+        this.particleBlendMode = 0;
+        this.customEase = null;
+        this.extraData = null;
+        //properties for spawning particles
+        this._frequency = 1;
+        this.spawnChance = 1;
+        this.maxParticles = 1000;
+        this.emitterLifetime = -1;
+        this.spawnPos = null;
+        this.spawnType = null;
+        this._spawnFunc = null;
+        this.spawnRect = null;
+        this.spawnCircle = null;
+        this.spawnPolygonalChain = null;
+        this.particlesPerWave = 1;
+        this.particleSpacing = 0;
+        this.angleStart = 0;
+        //emitter properties
+        this.rotation = 0;
+        this.ownerPos = null;
+        this._prevEmitterPos = null;
+        this._prevPosIsValid = false;
+        this._posChanged = false;
+        this._parent = null;
+        this.addAtBack = false;
+        this.particleCount = 0;
+        this._emit = false;
+        this._spawnTimer = 0;
+        this._emitterLife = -1;
+        this._activeParticlesFirst = null;
+        this._activeParticlesLast = null;
+        this._poolFirst = null;
+        this._origConfig = null;
+        this._origArt = null;
+        this._autoUpdate = false;
+        this._currentImageIndex = -1;
+        this._destroyWhenComplete = false;
+        this._completeCallback = null;
+        //set the initial parent
+        this.parent = particleParent;
+        if (particleImages && config)
+            this.init(particleImages, config);
+        //save often used functions on the instance instead of the prototype for better speed
+        this.recycle = this.recycle;
+        this.update = this.update;
+        this.rotate = this.rotate;
+        this.updateSpawnPos = this.updateSpawnPos;
+        this.updateOwnerPos = this.updateOwnerPos;
+    }
+    Object.defineProperty(Emitter.prototype, "orderedArt", {
+        /**
+         * If the emitter is using particle art in order as provided in `particleImages`.
+         * Effective only when `particleImages` has multiple art options.
+         * This is particularly useful ensuring that each art shows up once, in case you need to emit a body in an order.
+         * For example: dragon - [Head, body1, body2, ..., tail]
+         */
+        get: function () { return this._currentImageIndex !== -1; },
+        set: function (value) {
+            this._currentImageIndex = value ? 0 : -1;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(Emitter.prototype, "frequency", {
+        /**
+         * Time between particle spawns in seconds. If this value is not a number greater than 0,
+         * it will be set to 1 (particle per second) to prevent infinite loops.
+         */
+        get: function () { return this._frequency; },
+        set: function (value) {
+            //do some error checking to prevent infinite loops
+            if (typeof value == "number" && value > 0)
+                this._frequency = value;
+            else
+                this._frequency = 1;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(Emitter.prototype, "particleConstructor", {
+        /**
+         * The constructor used to create new particles. The default is
+         * the built in Particle class. Setting this will dump any active or
+         * pooled particles, if the emitter has already been used.
+         */
+        get: function () { return this._particleConstructor; },
+        set: function (value) {
+            if (value != this._particleConstructor) {
+                this._particleConstructor = value;
+                //clean up existing particles
+                this.cleanup();
+                //scrap all the particles
+                for (var particle = this._poolFirst; particle; particle = particle.next) {
+                    particle.destroy();
+                }
+                this._poolFirst = null;
+                //re-initialize the emitter so that the new constructor can do anything it needs to
+                if (this._origConfig && this._origArt)
+                    this.init(this._origArt, this._origConfig);
+            }
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(Emitter.prototype, "parent", {
+        /**
+        * The container to add particles to. Settings this will dump any active particles.
+        */
+        get: function () { return this._parent; },
+        set: function (value) {
+            this.cleanup();
+            this._parent = value;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    /**
+     * Sets up the emitter based on the config settings.
+     * @param art A texture or array of textures to use for the particles.
+     * @param config A configuration object containing settings for the emitter.
+     */
+    Emitter.prototype.init = function (art, config) {
+        if (!art || !config)
+            return;
+        //clean up any existing particles
+        this.cleanup();
+        //store the original config and particle images, in case we need to re-initialize
+        //when the particle constructor is changed
+        this._origConfig = config;
+        this._origArt = art;
+        //set up the array of data, also ensuring that it is an array
+        art = Array.isArray(art) ? art.slice() : [art];
+        //run the art through the particle class's parsing function
+        var partClass = this._particleConstructor;
+        this.particleImages = partClass.parseArt ? partClass.parseArt(art) : art;
+        ///////////////////////////
+        // Particle Properties   //
+        ///////////////////////////
+        //set up the alpha
+        if (config.alpha) {
+            this.startAlpha = PropertyNode.createList(config.alpha);
+        }
+        else
+            this.startAlpha = new PropertyNode(1, 0);
+        //set up the speed
+        if (config.speed) {
+            this.startSpeed = PropertyNode.createList(config.speed);
+            this.minimumSpeedMultiplier = ('minimumSpeedMultiplier' in config ? config.minimumSpeedMultiplier : config.speed.minimumSpeedMultiplier) || 1;
+        }
+        else {
+            this.minimumSpeedMultiplier = 1;
+            this.startSpeed = new PropertyNode(0, 0);
+        }
+        //set up acceleration
+        var acceleration = config.acceleration;
+        if (acceleration && (acceleration.x || acceleration.y)) {
+            //make sure we disable speed interpolation
+            this.startSpeed.next = null;
+            this.acceleration = new pixi.Point(acceleration.x, acceleration.y);
+            this.maxSpeed = config.maxSpeed || NaN;
+        }
+        else
+            this.acceleration = new pixi.Point();
+        //set up the scale
+        if (config.scale) {
+            this.startScale = PropertyNode.createList(config.scale);
+            this.minimumScaleMultiplier = ('minimumScaleMultiplier' in config ? config.minimumScaleMultiplier : config.scale.minimumScaleMultiplier) || 1;
+        }
+        else {
+            this.startScale = new PropertyNode(1, 0);
+            this.minimumScaleMultiplier = 1;
+        }
+        //set up the color
+        if (config.color) {
+            this.startColor = PropertyNode.createList(config.color);
+        }
+        else {
+            this.startColor = new PropertyNode({ r: 0xFF, g: 0xFF, b: 0xFF }, 0);
+        }
+        //set up the start rotation
+        if (config.startRotation) {
+            this.minStartRotation = config.startRotation.min;
+            this.maxStartRotation = config.startRotation.max;
+        }
+        else
+            this.minStartRotation = this.maxStartRotation = 0;
+        if (config.noRotation &&
+            (this.minStartRotation || this.maxStartRotation)) {
+            this.noRotation = !!config.noRotation;
+        }
+        else
+            this.noRotation = false;
+        //set up the rotation speed
+        if (config.rotationSpeed) {
+            this.minRotationSpeed = config.rotationSpeed.min;
+            this.maxRotationSpeed = config.rotationSpeed.max;
+        }
+        else
+            this.minRotationSpeed = this.maxRotationSpeed = 0;
+        this.rotationAcceleration = config.rotationAcceleration || 0;
+        //set up the lifetime
+        this.minLifetime = config.lifetime.min;
+        this.maxLifetime = config.lifetime.max;
+        //get the blend mode
+        this.particleBlendMode = exports.ParticleUtils.getBlendMode(config.blendMode);
+        //use the custom ease if provided
+        if (config.ease) {
+            this.customEase = typeof config.ease == "function" ?
+                config.ease : exports.ParticleUtils.generateEase(config.ease);
+        }
+        else
+            this.customEase = null;
+        //set up the extra data, running it through the particle class's parseData function.
+        if (partClass.parseData)
+            this.extraData = partClass.parseData(config.extraData);
+        else
+            this.extraData = config.extraData || null;
+        //////////////////////////
+        // Emitter Properties   //
+        //////////////////////////
+        //reset spawn type specific settings
+        this.spawnRect = this.spawnCircle = null;
+        this.particlesPerWave = 1;
+        if (config.particlesPerWave && config.particlesPerWave > 1)
+            this.particlesPerWave = config.particlesPerWave;
+        this.particleSpacing = 0;
+        this.angleStart = 0;
+        //determine the spawn function to use
+        this.parseSpawnType(config);
+        //set the spawning frequency
+        this.frequency = config.frequency;
+        this.spawnChance = (typeof config.spawnChance === 'number' && config.spawnChance > 0) ? config.spawnChance : 1;
+        //set the emitter lifetime
+        this.emitterLifetime = config.emitterLifetime || -1;
+        //set the max particles
+        this.maxParticles = config.maxParticles > 0 ? config.maxParticles : 1000;
+        //determine if we should add the particle at the back of the list or not
+        this.addAtBack = !!config.addAtBack;
+        //reset the emitter position and rotation variables
+        this.rotation = 0;
+        this.ownerPos = new pixi.Point();
+        this.spawnPos = new pixi.Point(config.pos.x, config.pos.y);
+        this.initAdditional(art, config);
+        this._prevEmitterPos = this.spawnPos.clone();
+        //previous emitter position is invalid and should not be used for interpolation
+        this._prevPosIsValid = false;
+        //start emitting
+        this._spawnTimer = 0;
+        this.emit = config.emit === undefined ? true : !!config.emit;
+        this.autoUpdate = !!config.autoUpdate;
+        this.orderedArt = !!config.orderedArt;
+    };
+    /**
+     * Sets up additional parameters to the emitter from config settings.
+     * Using for parsing additional parameters on classes that extend from Emitter
+     * @param art A texture or array of textures to use for the particles.
+     * @param config A configuration object containing settings for the emitter.
+     */
+    Emitter.prototype.initAdditional = function (art, config) {
+    };
+    /**
+     * Parsing emitter spawn type from config settings.
+     * Place for override and add new kind of spawn type
+     * @param config A configuration object containing settings for the emitter.
+     */
+    Emitter.prototype.parseSpawnType = function (config) {
+        var spawnCircle;
+        switch (config.spawnType) {
+            case "rect":
+                this.spawnType = "rect";
+                this._spawnFunc = this._spawnRect;
+                var spawnRect = config.spawnRect;
+                this.spawnRect = new pixi.Rectangle(spawnRect.x, spawnRect.y, spawnRect.w, spawnRect.h);
+                break;
+            case "circle":
+                this.spawnType = "circle";
+                this._spawnFunc = this._spawnCircle;
+                spawnCircle = config.spawnCircle;
+                this.spawnCircle = new pixi.Circle(spawnCircle.x, spawnCircle.y, spawnCircle.r);
+                break;
+            case "ring":
+                this.spawnType = "ring";
+                this._spawnFunc = this._spawnRing;
+                spawnCircle = config.spawnCircle;
+                this.spawnCircle = new pixi.Circle(spawnCircle.x, spawnCircle.y, spawnCircle.r);
+                this.spawnCircle.minRadius = spawnCircle.minR;
+                break;
+            case "burst":
+                this.spawnType = "burst";
+                this._spawnFunc = this._spawnBurst;
+                this.particleSpacing = config.particleSpacing;
+                this.angleStart = config.angleStart ? config.angleStart : 0;
+                break;
+            case "point":
+                this.spawnType = "point";
+                this._spawnFunc = this._spawnPoint;
+                break;
+            case "polygonalChain":
+                this.spawnType = "polygonalChain";
+                this._spawnFunc = this._spawnPolygonalChain;
+                this.spawnPolygonalChain = new PolygonalChain(config.spawnPolygon);
+                break;
+            default:
+                this.spawnType = "point";
+                this._spawnFunc = this._spawnPoint;
+                break;
+        }
+    };
+    /**
+     * Recycles an individual particle. For internal use only.
+     * @param particle The particle to recycle.
+     * @internal
+     */
+    Emitter.prototype.recycle = function (particle) {
+        if (particle.next)
+            particle.next.prev = particle.prev;
+        if (particle.prev)
+            particle.prev.next = particle.next;
+        if (particle == this._activeParticlesLast)
+            this._activeParticlesLast = particle.prev;
+        if (particle == this._activeParticlesFirst)
+            this._activeParticlesFirst = particle.next;
+        //add to pool
+        particle.prev = null;
+        particle.next = this._poolFirst;
+        this._poolFirst = particle;
+        //remove child from display, or make it invisible if it is in a ParticleContainer
+        if (particle.parent)
+            particle.parent.removeChild(particle);
+        //decrease count
+        --this.particleCount;
+    };
+    /**
+     * Sets the rotation of the emitter to a new value.
+     * @param newRot The new rotation, in degrees.
+     */
+    Emitter.prototype.rotate = function (newRot) {
+        if (this.rotation == newRot)
+            return;
+        //caclulate the difference in rotation for rotating spawnPos
+        var diff = newRot - this.rotation;
+        this.rotation = newRot;
+        //rotate spawnPos
+        exports.ParticleUtils.rotatePoint(diff, this.spawnPos);
+        //mark the position as having changed
+        this._posChanged = true;
+    };
+    /**
+     * Changes the spawn position of the emitter.
+     * @param x The new x value of the spawn position for the emitter.
+     * @param y The new y value of the spawn position for the emitter.
+     */
+    Emitter.prototype.updateSpawnPos = function (x, y) {
+        this._posChanged = true;
+        this.spawnPos.x = x;
+        this.spawnPos.y = y;
+    };
+    /**
+     * Changes the position of the emitter's owner. You should call this if you are adding
+     * particles to the world container that your emitter's owner is moving around in.
+     * @param x The new x value of the emitter's owner.
+     * @param y The new y value of the emitter's owner.
+     */
+    Emitter.prototype.updateOwnerPos = function (x, y) {
+        this._posChanged = true;
+        this.ownerPos.x = x;
+        this.ownerPos.y = y;
+    };
+    /**
+     * Prevents emitter position interpolation in the next update.
+     * This should be used if you made a major position change of your emitter's owner
+     * that was not normal movement.
+     */
+    Emitter.prototype.resetPositionTracking = function () {
+        this._prevPosIsValid = false;
+    };
+    Object.defineProperty(Emitter.prototype, "emit", {
+        /**
+         * If particles should be emitted during update() calls. Setting this to false
+         * stops new particles from being created, but allows existing ones to die out.
+         */
+        get: function () { return this._emit; },
+        set: function (value) {
+            this._emit = !!value;
+            this._emitterLife = this.emitterLifetime;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(Emitter.prototype, "autoUpdate", {
+        /**
+         * If the update function is called automatically from the shared ticker.
+         * Setting this to false requires calling the update function manually.
+         */
+        get: function () { return this._autoUpdate; },
+        set: function (value) {
+            if (this._autoUpdate && !value) {
+                ticker.remove(this.update, this);
+            }
+            else if (!this._autoUpdate && value) {
+                ticker.add(this.update, this);
+            }
+            this._autoUpdate = !!value;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    /**
+     * Starts emitting particles, sets autoUpdate to true, and sets up the Emitter to destroy itself
+     * when particle emission is complete.
+     * @param callback Callback for when emission is complete (all particles have died off)
+     */
+    Emitter.prototype.playOnceAndDestroy = function (callback) {
+        this.autoUpdate = true;
+        this.emit = true;
+        this._destroyWhenComplete = true;
+        this._completeCallback = callback;
+    };
+    /**
+     * Starts emitting particles and optionally calls a callback when particle emission is complete.
+     * @param callback Callback for when emission is complete (all particles have died off)
+     */
+    Emitter.prototype.playOnce = function (callback) {
+        this.emit = true;
+        this._completeCallback = callback;
+    };
+    /**
+     * Updates all particles spawned by this emitter and emits new ones.
+     * @param delta Time elapsed since the previous frame, in __seconds__.
+     */
+    Emitter.prototype.update = function (delta) {
+        if (this._autoUpdate) {
+            delta = delta / pixi.settings.TARGET_FPMS / 1000;
+        }
+        //if we don't have a parent to add particles to, then don't do anything.
+        //this also works as a isDestroyed check
+        if (!this._parent)
+            return;
+        //update existing particles
+        var i, particle, next;
+        for (particle = this._activeParticlesFirst; particle; particle = next) {
+            next = particle.next;
+            particle.update(delta);
+        }
+        var prevX, prevY;
+        //if the previous position is valid, store these for later interpolation
+        if (this._prevPosIsValid) {
+            prevX = this._prevEmitterPos.x;
+            prevY = this._prevEmitterPos.y;
+        }
+        //store current position of the emitter as local variables
+        var curX = this.ownerPos.x + this.spawnPos.x;
+        var curY = this.ownerPos.y + this.spawnPos.y;
+        //spawn new particles
+        if (this._emit) {
+            //decrease spawn timer
+            this._spawnTimer -= delta < 0 ? 0 : delta;
+            //while _spawnTimer < 0, we have particles to spawn
+            while (this._spawnTimer <= 0) {
+                //determine if the emitter should stop spawning
+                if (this._emitterLife > 0) {
+                    this._emitterLife -= this._frequency;
+                    if (this._emitterLife <= 0) {
+                        this._spawnTimer = 0;
+                        this._emitterLife = 0;
+                        this.emit = false;
+                        break;
+                    }
+                }
+                //determine if we have hit the particle limit
+                if (this.particleCount >= this.maxParticles) {
+                    this._spawnTimer += this._frequency;
+                    continue;
+                }
+                //determine the particle lifetime
+                var lifetime = void 0;
+                if (this.minLifetime == this.maxLifetime)
+                    lifetime = this.minLifetime;
+                else
+                    lifetime = Math.random() * (this.maxLifetime - this.minLifetime) + this.minLifetime;
+                //only make the particle if it wouldn't immediately destroy itself
+                if (-this._spawnTimer < lifetime) {
+                    //If the position has changed and this isn't the first spawn,
+                    //interpolate the spawn position
+                    var emitPosX = void 0, emitPosY = void 0;
+                    if (this._prevPosIsValid && this._posChanged) {
+                        //1 - _spawnTimer / delta, but _spawnTimer is negative
+                        var lerp = 1 + this._spawnTimer / delta;
+                        emitPosX = (curX - prevX) * lerp + prevX;
+                        emitPosY = (curY - prevY) * lerp + prevY;
+                    }
+                    else //otherwise just set to the spawn position
+                     {
+                        emitPosX = curX;
+                        emitPosY = curY;
+                    }
+                    //create enough particles to fill the wave (non-burst types have a wave of 1)
+                    i = 0;
+                    for (var len = Math.min(this.particlesPerWave, this.maxParticles - this.particleCount); i < len; ++i) {
+                        //see if we actually spawn one
+                        if (this.spawnChance < 1 && Math.random() >= this.spawnChance)
+                            continue;
+                        //create particle
+                        var p = void 0;
+                        if (this._poolFirst) {
+                            p = this._poolFirst;
+                            this._poolFirst = this._poolFirst.next;
+                            p.next = null;
+                        }
+                        else {
+                            p = new this.particleConstructor(this);
+                        }
+                        //set a random texture if we have more than one
+                        if (this.particleImages.length > 1) {
+                            // if using ordered art
+                            if (this._currentImageIndex !== -1) {
+                                // get current art index, then increment for the next particle
+                                p.applyArt(this.particleImages[this._currentImageIndex++]);
+                                // loop around if needed
+                                if (this._currentImageIndex < 0 || this._currentImageIndex >= this.particleImages.length) {
+                                    this._currentImageIndex = 0;
+                                }
+                            }
+                            // otherwise grab a random one
+                            else {
+                                p.applyArt(this.particleImages[Math.floor(Math.random() * this.particleImages.length)]);
+                            }
+                        }
+                        else {
+                            //if they are actually the same texture, a standard particle
+                            //will quit early from the texture setting in setTexture().
+                            p.applyArt(this.particleImages[0]);
+                        }
+                        //set up the start and end values
+                        p.alphaList.reset(this.startAlpha);
+                        if (this.minimumSpeedMultiplier != 1) {
+                            p.speedMultiplier = Math.random() * (1 - this.minimumSpeedMultiplier) + this.minimumSpeedMultiplier;
+                        }
+                        p.speedList.reset(this.startSpeed);
+                        p.acceleration.x = this.acceleration.x;
+                        p.acceleration.y = this.acceleration.y;
+                        p.maxSpeed = this.maxSpeed;
+                        if (this.minimumScaleMultiplier != 1) {
+                            p.scaleMultiplier = Math.random() * (1 - this.minimumScaleMultiplier) + this.minimumScaleMultiplier;
+                        }
+                        p.scaleList.reset(this.startScale);
+                        p.colorList.reset(this.startColor);
+                        //randomize the rotation speed
+                        if (this.minRotationSpeed == this.maxRotationSpeed)
+                            p.rotationSpeed = this.minRotationSpeed;
+                        else
+                            p.rotationSpeed = Math.random() * (this.maxRotationSpeed - this.minRotationSpeed) + this.minRotationSpeed;
+                        p.rotationAcceleration = this.rotationAcceleration;
+                        p.noRotation = this.noRotation;
+                        //set up the lifetime
+                        p.maxLife = lifetime;
+                        //set the blend mode
+                        p.blendMode = this.particleBlendMode;
+                        //set the custom ease, if any
+                        p.ease = this.customEase;
+                        //set the extra data, if any
+                        p.extraData = this.extraData;
+                        //set additional properties to particle
+                        this.applyAdditionalProperties(p);
+                        //call the proper function to handle rotation and position of particle
+                        this._spawnFunc(p, emitPosX, emitPosY, i);
+                        //initialize particle
+                        p.init();
+                        //update the particle by the time passed, so the particles are spread out properly
+                        p.update(-this._spawnTimer); //we want a positive delta, because a negative delta messes things up
+                        //add the particle to the display list
+                        if (!p.parent) {
+                            if (this.addAtBack)
+                                this._parent.addChildAt(p, 0);
+                            else
+                                this._parent.addChild(p);
+                        }
+                        else {
+                            //kind of hacky, but performance friendly
+                            //shuffle children to correct place
+                            var children = this._parent.children;
+                            //avoid using splice if possible
+                            if (children[0] == p)
+                                children.shift();
+                            else if (children[children.length - 1] == p)
+                                children.pop();
+                            else {
+                                var index = children.indexOf(p);
+                                children.splice(index, 1);
+                            }
+                            if (this.addAtBack)
+                                children.unshift(p);
+                            else
+                                children.push(p);
+                        }
+                        //add particle to list of active particles
+                        if (this._activeParticlesLast) {
+                            this._activeParticlesLast.next = p;
+                            p.prev = this._activeParticlesLast;
+                            this._activeParticlesLast = p;
+                        }
+                        else {
+                            this._activeParticlesLast = this._activeParticlesFirst = p;
+                        }
+                        ++this.particleCount;
+                    }
+                }
+                //increase timer and continue on to any other particles that need to be created
+                this._spawnTimer += this._frequency;
+            }
+        }
+        //if the position changed before this update, then keep track of that
+        if (this._posChanged) {
+            this._prevEmitterPos.x = curX;
+            this._prevEmitterPos.y = curY;
+            this._prevPosIsValid = true;
+            this._posChanged = false;
+        }
+        //if we are all done and should destroy ourselves, take care of that
+        if (!this._emit && !this._activeParticlesFirst) {
+            if (this._completeCallback) {
+                var cb = this._completeCallback;
+                this._completeCallback = null;
+                cb();
+            }
+            if (this._destroyWhenComplete) {
+                this.destroy();
+            }
+        }
+    };
+    /**
+     * Set additional properties to new particle.
+     * Using on classes that extend from Emitter
+     * @param p The particle
+     */
+    Emitter.prototype.applyAdditionalProperties = function (p) {
+    };
+    /**
+     * Positions a particle for a point type emitter.
+     * @param p The particle to position and rotate.
+     * @param emitPosX The emitter's x position
+     * @param emitPosY The emitter's y position
+     * @param i The particle number in the current wave. Not used for this function.
+     */
+    Emitter.prototype._spawnPoint = function (p, emitPosX, emitPosY) {
+        //set the initial rotation/direction of the particle based on
+        //starting particle angle and rotation of emitter
+        if (this.minStartRotation == this.maxStartRotation)
+            p.rotation = this.minStartRotation + this.rotation;
+        else
+            p.rotation = Math.random() * (this.maxStartRotation - this.minStartRotation) + this.minStartRotation + this.rotation;
+        //drop the particle at the emitter's position
+        p.position.x = emitPosX;
+        p.position.y = emitPosY;
+    };
+    /**
+     * Positions a particle for a rectangle type emitter.
+     * @param p The particle to position and rotate.
+     * @param emitPosX The emitter's x position
+     * @param emitPosY The emitter's y position
+     * @param i The particle number in the current wave. Not used for this function.
+     */
+    Emitter.prototype._spawnRect = function (p, emitPosX, emitPosY) {
+        //set the initial rotation/direction of the particle based on starting
+        //particle angle and rotation of emitter
+        if (this.minStartRotation == this.maxStartRotation)
+            p.rotation = this.minStartRotation + this.rotation;
+        else
+            p.rotation = Math.random() * (this.maxStartRotation - this.minStartRotation) + this.minStartRotation + this.rotation;
+        //place the particle at a random point in the rectangle
+        helperPoint.x = Math.random() * this.spawnRect.width + this.spawnRect.x;
+        helperPoint.y = Math.random() * this.spawnRect.height + this.spawnRect.y;
+        if (this.rotation !== 0)
+            exports.ParticleUtils.rotatePoint(this.rotation, helperPoint);
+        p.position.x = emitPosX + helperPoint.x;
+        p.position.y = emitPosY + helperPoint.y;
+    };
+    /**
+     * Positions a particle for a circle type emitter.
+     * @param p The particle to position and rotate.
+     * @param emitPosX The emitter's x position
+     * @param emitPosY The emitter's y position
+     * @param i The particle number in the current wave. Not used for this function.
+     */
+    Emitter.prototype._spawnCircle = function (p, emitPosX, emitPosY) {
+        //set the initial rotation/direction of the particle based on starting
+        //particle angle and rotation of emitter
+        if (this.minStartRotation == this.maxStartRotation)
+            p.rotation = this.minStartRotation + this.rotation;
+        else
+            p.rotation = Math.random() * (this.maxStartRotation - this.minStartRotation) +
+                this.minStartRotation + this.rotation;
+        //place the particle at a random radius in the circle
+        helperPoint.x = Math.random() * this.spawnCircle.radius;
+        helperPoint.y = 0;
+        //rotate the point to a random angle in the circle
+        exports.ParticleUtils.rotatePoint(Math.random() * 360, helperPoint);
+        //offset by the circle's center
+        helperPoint.x += this.spawnCircle.x;
+        helperPoint.y += this.spawnCircle.y;
+        //rotate the point by the emitter's rotation
+        if (this.rotation !== 0)
+            exports.ParticleUtils.rotatePoint(this.rotation, helperPoint);
+        //set the position, offset by the emitter's position
+        p.position.x = emitPosX + helperPoint.x;
+        p.position.y = emitPosY + helperPoint.y;
+    };
+    /**
+     * Positions a particle for a ring type emitter.
+     * @param p The particle to position and rotate.
+     * @param emitPosX The emitter's x position
+     * @param emitPosY The emitter's y position
+     * @param i The particle number in the current wave. Not used for this function.
+     */
+    Emitter.prototype._spawnRing = function (p, emitPosX, emitPosY) {
+        var spawnCircle = this.spawnCircle;
+        //set the initial rotation/direction of the particle based on starting
+        //particle angle and rotation of emitter
+        if (this.minStartRotation == this.maxStartRotation)
+            p.rotation = this.minStartRotation + this.rotation;
+        else
+            p.rotation = Math.random() * (this.maxStartRotation - this.minStartRotation) +
+                this.minStartRotation + this.rotation;
+        //place the particle at a random radius in the ring
+        if (spawnCircle.minRadius !== spawnCircle.radius) {
+            helperPoint.x = Math.random() * (spawnCircle.radius - spawnCircle.minRadius) +
+                spawnCircle.minRadius;
+        }
+        else
+            helperPoint.x = spawnCircle.radius;
+        helperPoint.y = 0;
+        //rotate the point to a random angle in the circle
+        var angle = Math.random() * 360;
+        p.rotation += angle;
+        exports.ParticleUtils.rotatePoint(angle, helperPoint);
+        //offset by the circle's center
+        helperPoint.x += this.spawnCircle.x;
+        helperPoint.y += this.spawnCircle.y;
+        //rotate the point by the emitter's rotation
+        if (this.rotation !== 0)
+            exports.ParticleUtils.rotatePoint(this.rotation, helperPoint);
+        //set the position, offset by the emitter's position
+        p.position.x = emitPosX + helperPoint.x;
+        p.position.y = emitPosY + helperPoint.y;
+    };
+    /**
+     * Positions a particle for polygonal chain.
+     * @param p The particle to position and rotate.
+     * @param emitPosX The emitter's x position
+     * @param emitPosY The emitter's y position
+     * @param i The particle number in the current wave. Not used for this function.
+     */
+    Emitter.prototype._spawnPolygonalChain = function (p, emitPosX, emitPosY) {
+        //set the initial rotation/direction of the particle based on starting
+        //particle angle and rotation of emitter
+        if (this.minStartRotation == this.maxStartRotation)
+            p.rotation = this.minStartRotation + this.rotation;
+        else
+            p.rotation = Math.random() * (this.maxStartRotation - this.minStartRotation) +
+                this.minStartRotation + this.rotation;
+        // get random point on the polygon chain
+        this.spawnPolygonalChain.getRandomPoint(helperPoint);
+        //rotate the point by the emitter's rotation
+        if (this.rotation !== 0)
+            exports.ParticleUtils.rotatePoint(this.rotation, helperPoint);
+        //set the position, offset by the emitter's position
+        p.position.x = emitPosX + helperPoint.x;
+        p.position.y = emitPosY + helperPoint.y;
+    };
+    /**
+     * Positions a particle for a burst type emitter.
+     * @param p The particle to position and rotate.
+     * @param emitPosX The emitter's x position
+     * @param emitPosY The emitter's y position
+     * @param i The particle number in the current wave.
+     */
+    Emitter.prototype._spawnBurst = function (p, emitPosX, emitPosY, i) {
+        //set the initial rotation/direction of the particle based on spawn
+        //angle and rotation of emitter
+        if (this.particleSpacing === 0)
+            p.rotation = Math.random() * 360;
+        else
+            p.rotation = this.angleStart + (this.particleSpacing * i) + this.rotation;
+        //drop the particle at the emitter's position
+        p.position.x = emitPosX;
+        p.position.y = emitPosY;
+    };
+    /**
+     * Kills all active particles immediately.
+     */
+    Emitter.prototype.cleanup = function () {
+        var particle, next;
+        for (particle = this._activeParticlesFirst; particle; particle = next) {
+            next = particle.next;
+            this.recycle(particle);
+            if (particle.parent)
+                particle.parent.removeChild(particle);
+        }
+        this._activeParticlesFirst = this._activeParticlesLast = null;
+        this.particleCount = 0;
+    };
+    /**
+     * Destroys the emitter and all of its particles.
+     */
+    Emitter.prototype.destroy = function () {
+        //make sure we aren't still listening to any tickers
+        this.autoUpdate = false;
+        //puts all active particles in the pool, and removes them from the particle parent
+        this.cleanup();
+        //wipe the pool clean
+        var next;
+        for (var particle = this._poolFirst; particle; particle = next) {
+            //store next value so we don't lose it in our destroy call
+            next = particle.next;
+            particle.destroy();
+        }
+        this._poolFirst = this._parent = this.particleImages = this.spawnPos = this.ownerPos =
+            this.startColor = this.startScale = this.startAlpha = this.startSpeed =
+                this.customEase = this._completeCallback = null;
+    };
+    return Emitter;
+}());
+
+/**
+ * A helper point for math things.
+ * @hidden
+ */
+var helperPoint$1 = new pixi.Point();
+/**
+ * A hand picked list of Math functions (and a couple properties) that are
+ * allowable. They should be used without the preceding "Math."
+ * @hidden
+ */
+var MATH_FUNCS = [
+    "pow",
+    "sqrt",
+    "abs",
+    "floor",
+    "round",
+    "ceil",
+    "E",
+    "PI",
+    "sin",
+    "cos",
+    "tan",
+    "asin",
+    "acos",
+    "atan",
+    "atan2",
+    "log"
+];
+/**
+ * create an actual regular expression object from the string
+ * @hidden
+ */
+var WHITELISTER = new RegExp([
+    //Allow the 4 basic operations, parentheses and all numbers/decimals, as well
+    //as 'x', for the variable usage.
+    "[01234567890\\.\\*\\-\\+\\/\\(\\)x ,]",
+].concat(MATH_FUNCS).join("|"), "g");
+/**
+ * Parses a string into a function for path following.
+ * This involves whitelisting the string for safety, inserting "Math." to math function
+ * names, and using `new Function()` to generate a function.
+ * @hidden
+ * @param pathString The string to parse.
+ * @return The path function - takes x, outputs y.
+ */
+var parsePath = function (pathString) {
+    var matches = pathString.match(WHITELISTER);
+    for (var i = matches.length - 1; i >= 0; --i) {
+        if (MATH_FUNCS.indexOf(matches[i]) >= 0)
+            matches[i] = "Math." + matches[i];
+    }
+    pathString = matches.join("");
+    return new Function("x", "return " + pathString + ";");
+};
+/**
+ * An particle that follows a path defined by an algebraic expression, e.g. "sin(x)" or
+ * "5x + 3".
+ * To use this class, the particle config must have a "path" string in the
+ * "extraData" parameter. This string should have "x" in it to represent movement (from the
+ * speed settings of the particle). It may have numbers, parentheses, the four basic
+ * operations, and the following Math functions or properties (without the preceding "Math."):
+ * "pow", "sqrt", "abs", "floor", "round", "ceil", "E", "PI", "sin", "cos", "tan", "asin",
+ * "acos", "atan", "atan2", "log".
+ * The overall movement of the particle and the expression value become x and y positions for
+ * the particle, respectively. The final position is rotated by the spawn rotation/angle of
+ * the particle.
+ *
+ * Some example paths:
+ *
+ * 	"sin(x/10) * 20" // A sine wave path.
+ * 	"cos(x/100) * 30" // Particles curve counterclockwise (for medium speed/low lifetime particles)
+ * 	"pow(x/10, 2) / 2" // Particles curve clockwise (remember, +y is down).
+ */
+var PathParticle = /** @class */ (function (_super) {
+    __extends(PathParticle, _super);
+    /**
+     * @param {PIXI.particles.Emitter} emitter The emitter that controls this PathParticle.
+     */
+    function PathParticle(emitter) {
+        var _this = _super.call(this, emitter) || this;
+        _this.path = null;
+        _this.initialRotation = 0;
+        _this.initialPosition = new pixi.Point();
+        _this.movement = 0;
+        return _this;
+    }
+    /**
+     * Initializes the particle for use, based on the properties that have to
+     * have been set already on the particle.
+     */
+    PathParticle.prototype.init = function () {
+        //get initial rotation before it is converted to radians
+        this.initialRotation = this.rotation;
+        //standard init
+        this.Particle_init();
+        //set the path for the particle
+        this.path = this.extraData.path;
+        //cancel the normal movement behavior
+        this._doNormalMovement = !this.path;
+        //reset movement
+        this.movement = 0;
+        //grab position
+        this.initialPosition.x = this.position.x;
+        this.initialPosition.y = this.position.y;
+    };
+    /**
+     * Updates the particle.
+     * @param delta Time elapsed since the previous frame, in __seconds__.
+     */
+    PathParticle.prototype.update = function (delta) {
+        var lerp = this.Particle_update(delta);
+        //if the particle died during the update, then don't bother
+        if (lerp >= 0 && this.path) {
+            //increase linear movement based on speed
+            var speed = this.speedList.interpolate(lerp) * this.speedMultiplier;
+            this.movement += speed * delta;
+            //set up the helper point for rotation
+            helperPoint$1.x = this.movement;
+            helperPoint$1.y = this.path(this.movement);
+            exports.ParticleUtils.rotatePoint(this.initialRotation, helperPoint$1);
+            this.position.x = this.initialPosition.x + helperPoint$1.x;
+            this.position.y = this.initialPosition.y + helperPoint$1.y;
+        }
+        return lerp;
+    };
+    /**
+     * Destroys the particle, removing references and preventing future use.
+     */
+    PathParticle.prototype.destroy = function () {
+        this.Particle_destroy();
+        this.path = this.initialPosition = null;
+    };
+    /**
+     * Checks over the art that was passed to the Emitter's init() function, to do any special
+     * modifications to prepare it ahead of time. This just runs Particle.parseArt().
+     * @param art The array of art data. For Particle, it should be an array of
+     *            Textures. Any strings in the array will be converted to
+     *            Textures via Texture.fromImage().
+     * @return The art, after any needed modifications.
+     */
+    PathParticle.parseArt = function (art) {
+        return Particle.parseArt(art);
+    };
+    /**
+     * Parses extra emitter data to ensure it is set up for this particle class.
+     * PathParticle checks for the existence of path data, and parses the path data for use
+     * by particle instances.
+     * @param extraData The extra data from the particle config.
+     * @return The parsed extra data.
+     */
+    PathParticle.parseData = function (extraData) {
+        var output = {};
+        if (extraData && extraData.path) {
+            try {
+                output.path = parsePath(extraData.path);
+            }
+            catch (e) {
+                if (exports.ParticleUtils.verbose)
+                    console.error("PathParticle: error in parsing path expression");
+                output.path = null;
+            }
+        }
+        else {
+            if (exports.ParticleUtils.verbose)
+                console.error("PathParticle requires a path string in extraData!");
+            output.path = null;
+        }
+        return output;
+    };
+    return PathParticle;
+}(Particle));
+
+/**
+ * An individual particle image with an animation. Art data passed to the emitter must be
+ * formatted in a particular way for AnimatedParticle to be able to handle it:
+ *
+ * ```typescript
+ * {
+ *     //framerate is required. It is the animation speed of the particle in frames per
+ *     //second.
+ *     //A value of "matchLife" causes the animation to match the lifetime of an individual
+ *     //particle, instead of at a constant framerate. This causes the animation to play
+ *     //through one time, completing when the particle expires.
+ *     framerate: 6,
+ *     //loop is optional, and defaults to false.
+ *     loop: true,
+ *     //textures is required, and can be an array of any (non-zero) length.
+ *     textures: [
+ *         //each entry represents a single texture that should be used for one or more
+ *         //frames. Any strings will be converted to Textures with Texture.from().
+ *         //Instances of PIXI.Texture will be used directly.
+ *         "animFrame1.png",
+ *         //entries can be an object with a 'count' property, telling AnimatedParticle to
+ *         //use that texture for 'count' frames sequentially.
+ *         {
+ *             texture: "animFrame2.png",
+ *             count: 3
+ *         },
+ *         "animFrame3.png"
+ *     ]
+ * }
+ * ```
+ */
+var AnimatedParticle = /** @class */ (function (_super) {
+    __extends(AnimatedParticle, _super);
+    /**
+     * @param emitter The emitter that controls this AnimatedParticle.
+     */
+    function AnimatedParticle(emitter) {
+        var _this = _super.call(this, emitter) || this;
+        _this.textures = null;
+        _this.duration = 0;
+        _this.framerate = 0;
+        _this.elapsed = 0;
+        _this.loop = false;
+        return _this;
+    }
+    /**
+     * Initializes the particle for use, based on the properties that have to
+     * have been set already on the particle.
+     */
+    AnimatedParticle.prototype.init = function () {
+        this.Particle_init();
+        this.elapsed = 0;
+        //if the animation needs to match the particle's life, then cacluate variables
+        if (this.framerate < 0) {
+            this.duration = this.maxLife;
+            this.framerate = this.textures.length / this.duration;
+        }
+    };
+    /**
+     * Sets the textures for the particle.
+     * @param art An array of PIXI.Texture objects for this animated particle.
+     */
+    AnimatedParticle.prototype.applyArt = function (art) {
+        this.textures = art.textures;
+        this.framerate = art.framerate;
+        this.duration = art.duration;
+        this.loop = art.loop;
+    };
+    /**
+     * Updates the particle.
+     * @param delta Time elapsed since the previous frame, in __seconds__.
+     */
+    AnimatedParticle.prototype.update = function (delta) {
+        var lerp = this.Particle_update(delta);
+        //only animate the particle if it is still alive
+        if (lerp >= 0) {
+            this.elapsed += delta;
+            if (this.elapsed > this.duration) {
+                //loop elapsed back around
+                if (this.loop)
+                    this.elapsed = this.elapsed % this.duration;
+                //subtract a small amount to prevent attempting to go past the end of the animation
+                else
+                    this.elapsed = this.duration - 0.000001;
+            }
+            // add a very small number to the frame and then floor it to avoid
+            // the frame being one short due to floating point errors.
+            var frame = (this.elapsed * this.framerate + 0.0000001) | 0;
+            this.texture = this.textures[frame] || pixi.Texture.EMPTY;
+        }
+        return lerp;
+    };
+    /**
+     * Destroys the particle, removing references and preventing future use.
+     */
+    AnimatedParticle.prototype.destroy = function () {
+        this.Particle_destroy();
+        this.textures = null;
+    };
+    /**
+     * Checks over the art that was passed to the Emitter's init() function, to do any special
+     * modifications to prepare it ahead of time.
+     * @param art The array of art data, properly formatted for AnimatedParticle.
+     * @return The art, after any needed modifications.
+     */
+    AnimatedParticle.parseArt = function (art) {
+        var data, output, textures, tex, outTextures;
+        var outArr = [];
+        for (var i = 0; i < art.length; ++i) {
+            data = art[i];
+            outArr[i] = output = {};
+            output.textures = outTextures = [];
+            textures = data.textures;
+            for (var j = 0; j < textures.length; ++j) {
+                tex = textures[j];
+                if (typeof tex == "string")
+                    outTextures.push(GetTextureFromString(tex));
+                else if (tex instanceof pixi.Texture)
+                    outTextures.push(tex);
+                //assume an object with extra data determining duplicate frame data
+                else {
+                    var dupe = tex.count || 1;
+                    if (typeof tex.texture == "string")
+                        tex = GetTextureFromString(tex.texture);
+                    else // if(tex.texture instanceof Texture)
+                        tex = tex.texture;
+                    for (; dupe > 0; --dupe) {
+                        outTextures.push(tex);
+                    }
+                }
+            }
+            //use these values to signify that the animation should match the particle life time.
+            if (data.framerate == "matchLife") {
+                //-1 means that it should be calculated
+                output.framerate = -1;
+                output.duration = 0;
+                output.loop = false;
+            }
+            else {
+                //determine if the animation should loop
+                output.loop = !!data.loop;
+                //get the framerate, default to 60
+                output.framerate = data.framerate > 0 ? data.framerate : 60;
+                //determine the duration
+                output.duration = outTextures.length / output.framerate;
+            }
+        }
+        return outArr;
+    };
+    return AnimatedParticle;
+}(Particle));
+
+exports.GetTextureFromString = GetTextureFromString;
+exports.Particle = Particle;
+exports.Emitter = Emitter;
+exports.PathParticle = PathParticle;
+exports.AnimatedParticle = AnimatedParticle;
+exports.PolygonalChain = PolygonalChain;
+exports.PropertyList = PropertyList;
+exports.PropertyNode = PropertyNode;
+
+
+},{"pixi.js":145}],28:[function(require,module,exports){
 !function(e){function t(r){if(i[r])return i[r].exports;var n=i[r]={exports:{},id:r,loaded:!1};return e[r].call(n.exports,n,n.exports,t),n.loaded=!0,n.exports}var i={};return t.m=e,t.c=i,t.p="",t(0)}([function(e,t,i){e.exports=i(4)},function(e,t,i){"use strict";function r(e){return e&&e.__esModule?e:{"default":e}}function n(e,t){if(!(e instanceof t))throw new TypeError("Cannot call a class as a function")}function a(e,t){if(!e)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!t||"object"!=typeof t&&"function"!=typeof t?e:t}function s(e,t){if("function"!=typeof t&&null!==t)throw new TypeError("Super expression must either be null or a function, not "+typeof t);e.prototype=Object.create(t&&t.prototype,{constructor:{value:e,enumerable:!1,writable:!0,configurable:!0}}),t&&(Object.setPrototypeOf?Object.setPrototypeOf(e,t):e.__proto__=t)}var o=function(){function e(e,t){for(var i=0;i<t.length;i++){var r=t[i];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(e,r.key,r)}}return function(t,i,r){return i&&e(t.prototype,i),r&&e(t,r),t}}();Object.defineProperty(t,"__esModule",{value:!0});var u=i(2),l=r(u),h=function(e){function t(){var e=arguments.length<=0||void 0===arguments[0]?1:arguments[0],i=arguments[1];n(this,t);var r=a(this,Object.getPrototypeOf(t).call(this));return r.time=e,i&&r.addTo(i),r.active=!1,r.isEnded=!1,r.isStarted=!1,r.expire=!1,r.delay=0,r.repeat=0,r.loop=!1,r._delayTime=0,r._elapsedTime=0,r._repeat=0,r}return s(t,e),o(t,[{key:"addTo",value:function(e){return this.manager=e,this.manager.addTimer(this),this}},{key:"remove",value:function(){return this.manager?(this.manager.removeTimer(this),this):void 0}},{key:"start",value:function(){return this.active=!0,this}},{key:"stop",value:function(){return this.active=!1,this.emit("stop",this._elapsedTime),this}},{key:"reset",value:function(){return this._elapsedTime=0,this._repeat=0,this._delayTime=0,this.isStarted=!1,this.isEnded=!1,this}},{key:"update",value:function(e,t){if(this.active){if(this.delay>this._delayTime)return void(this._delayTime+=t);if(this.isStarted||(this.isStarted=!0,this.emit("start",this._elapsedTime)),this.time>this._elapsedTime){var i=this._elapsedTime+t,r=i>=this.time;if(this._elapsedTime=r?this.time:i,this.emit("update",this._elapsedTime,e),r){if(this.loop||this.repeat>this._repeat)return this._repeat++,this.emit("repeat",this._elapsedTime,this._repeat),void(this._elapsedTime=0);this.isEnded=!0,this.active=!1,this.emit("end",this._elapsedTime)}}}}}]),t}(l["default"].utils.EventEmitter);t["default"]=h},function(e,t){e.exports=PIXI},function(e,t,i){"use strict";function r(e){return e&&e.__esModule?e:{"default":e}}function n(e,t){if(!(e instanceof t))throw new TypeError("Cannot call a class as a function")}var a=function(){function e(e,t){for(var i=0;i<t.length;i++){var r=t[i];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(e,r.key,r)}}return function(t,i,r){return i&&e(t.prototype,i),r&&e(t,r),t}}();Object.defineProperty(t,"__esModule",{value:!0});var s=i(1),o=r(s),u=function(){function e(){n(this,e),this.timers=[],this._timersToDelete=[],this._last=0}return a(e,[{key:"update",value:function(e){var t=void 0;e||0===e?t=1e3*e:(t=this._getDeltaMS(),e=t/1e3);for(var i=0;i<this.timers.length;i++){var r=this.timers[i];r.active&&(r.update(e,t),r.isEnded&&r.expire&&r.remove())}if(this._timersToDelete.length){for(var i=0;i<this._timersToDelete.length;i++)this._remove(this._timersToDelete[i]);this._timersToDelete.length=0}}},{key:"removeTimer",value:function(e){this._timersToDelete.push(e)}},{key:"addTimer",value:function(e){e.manager=this,this.timers.push(e)}},{key:"createTimer",value:function(e){return new o["default"](e,this)}},{key:"_remove",value:function(e){var t=this.timers.indexOf(e);t>0&&this.timers.splice(t,1)}},{key:"_getDeltaMS",value:function(){0===this._last&&(this._last=Date.now());var e=Date.now(),t=e-this._last;return this._last=e,t}}]),e}();t["default"]=u},function(e,t,i){"use strict";function r(e){return e&&e.__esModule?e:{"default":e}}Object.defineProperty(t,"__esModule",{value:!0});var n=i(2),a=r(n),s=i(3),o=r(s),u=i(1),l=r(u),h={TimerManager:o["default"],Timer:l["default"]};a["default"].timerManager||(a["default"].timerManager=new o["default"],a["default"].timer=h),t["default"]=h}]);
 
-},{}],31:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
+!function(t){function e(i){if(n[i])return n[i].exports;var r=n[i]={exports:{},id:i,loaded:!1};return t[i].call(r.exports,r,r.exports,e),r.loaded=!0,r.exports}var n={};return e.m=t,e.c=n,e.p="",e(0)}([function(t,e,n){t.exports=n(6)},function(t,e){t.exports=PIXI},function(t,e){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var n={linear:function(){return function(t){return t}},inQuad:function(){return function(t){return t*t}},outQuad:function(){return function(t){return t*(2-t)}},inOutQuad:function(){return function(t){return t*=2,1>t?.5*t*t:-.5*(--t*(t-2)-1)}},inCubic:function(){return function(t){return t*t*t}},outCubic:function(){return function(t){return--t*t*t+1}},inOutCubic:function(){return function(t){return t*=2,1>t?.5*t*t*t:(t-=2,.5*(t*t*t+2))}},inQuart:function(){return function(t){return t*t*t*t}},outQuart:function(){return function(t){return 1- --t*t*t*t}},inOutQuart:function(){return function(t){return t*=2,1>t?.5*t*t*t*t:(t-=2,-.5*(t*t*t*t-2))}},inQuint:function(){return function(t){return t*t*t*t*t}},outQuint:function(){return function(t){return--t*t*t*t*t+1}},inOutQuint:function(){return function(t){return t*=2,1>t?.5*t*t*t*t*t:(t-=2,.5*(t*t*t*t*t+2))}},inSine:function(){return function(t){return 1-Math.cos(t*Math.PI/2)}},outSine:function(){return function(t){return Math.sin(t*Math.PI/2)}},inOutSine:function(){return function(t){return.5*(1-Math.cos(Math.PI*t))}},inExpo:function(){return function(t){return 0===t?0:Math.pow(1024,t-1)}},outExpo:function(){return function(t){return 1===t?1:1-Math.pow(2,-10*t)}},inOutExpo:function(){return function(t){return 0===t?0:1===t?1:(t*=2,1>t?.5*Math.pow(1024,t-1):.5*(-Math.pow(2,-10*(t-1))+2))}},inCirc:function(){return function(t){return 1-Math.sqrt(1-t*t)}},outCirc:function(){return function(t){return Math.sqrt(1- --t*t)}},inOutCirc:function(){return function(t){return t*=2,1>t?-.5*(Math.sqrt(1-t*t)-1):.5*(Math.sqrt(1-(t-2)*(t-2))+1)}},inElastic:function(){var t=arguments.length<=0||void 0===arguments[0]?.1:arguments[0],e=arguments.length<=1||void 0===arguments[1]?.4:arguments[1];return function(n){var i=void 0;return 0===n?0:1===n?1:(!t||1>t?(t=1,i=e/4):i=e*Math.asin(1/t)/(2*Math.PI),-(t*Math.pow(2,10*(n-1))*Math.sin((n-1-i)*(2*Math.PI)/e)))}},outElastic:function(){var t=arguments.length<=0||void 0===arguments[0]?.1:arguments[0],e=arguments.length<=1||void 0===arguments[1]?.4:arguments[1];return function(n){var i=void 0;return 0===n?0:1===n?1:(!t||1>t?(t=1,i=e/4):i=e*Math.asin(1/t)/(2*Math.PI),t*Math.pow(2,-10*n)*Math.sin((n-i)*(2*Math.PI)/e)+1)}},inOutElastic:function(){var t=arguments.length<=0||void 0===arguments[0]?.1:arguments[0],e=arguments.length<=1||void 0===arguments[1]?.4:arguments[1];return function(n){var i=void 0;return 0===n?0:1===n?1:(!t||1>t?(t=1,i=e/4):i=e*Math.asin(1/t)/(2*Math.PI),n*=2,1>n?-.5*(t*Math.pow(2,10*(n-1))*Math.sin((n-1-i)*(2*Math.PI)/e)):t*Math.pow(2,-10*(n-1))*Math.sin((n-1-i)*(2*Math.PI)/e)*.5+1)}},inBack:function(t){return function(e){var n=t||1.70158;return e*e*((n+1)*e-n)}},outBack:function(t){return function(e){var n=t||1.70158;return--e*e*((n+1)*e+n)+1}},inOutBack:function(t){return function(e){var n=1.525*(t||1.70158);return e*=2,1>e?.5*(e*e*((n+1)*e-n)):.5*((e-2)*(e-2)*((n+1)*(e-2)+n)+2)}},inBounce:function(){return function(t){return 1-n.outBounce()(1-t)}},outBounce:function(){return function(t){return 1/2.75>t?7.5625*t*t:2/2.75>t?(t-=1.5/2.75,7.5625*t*t+.75):2.5/2.75>t?(t-=2.25/2.75,7.5625*t*t+.9375):(t-=2.625/2.75,7.5625*t*t+.984375)}},inOutBounce:function(){return function(t){return.5>t?.5*n.inBounce()(2*t):.5*n.outBounce()(2*t-1)+.5}},customArray:function(t){return t?function(t){return t}:n.linear()}};e["default"]=n},function(t,e,n){"use strict";function i(t){return t&&t.__esModule?t:{"default":t}}function r(t){if(t&&t.__esModule)return t;var e={};if(null!=t)for(var n in t)Object.prototype.hasOwnProperty.call(t,n)&&(e[n]=t[n]);return e["default"]=t,e}function s(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}function o(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}function a(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}function u(t,e,n,i,r,s){for(var o in t)if(c(t[o]))u(t[o],e[o],n[o],i,r,s);else{var a=e[o],h=t[o]-e[o],l=i,f=r/l;n[o]=a+h*s(f)}}function h(t,e,n){for(var i in t)0===e[i]||e[i]||(c(n[i])?(e[i]=JSON.parse(JSON.stringify(n[i])),h(t[i],e[i],n[i])):e[i]=n[i])}function c(t){return"[object Object]"===Object.prototype.toString.call(t)}var l=function(){function t(t,e){for(var n=0;n<e.length;n++){var i=e[n];i.enumerable=i.enumerable||!1,i.configurable=!0,"value"in i&&(i.writable=!0),Object.defineProperty(t,i.key,i)}}return function(e,n,i){return n&&t(e.prototype,n),i&&t(e,i),e}}();Object.defineProperty(e,"__esModule",{value:!0});var f=n(1),p=r(f),d=n(2),g=i(d),v=function(t){function e(t,n){s(this,e);var i=o(this,Object.getPrototypeOf(e).call(this));return i.target=t,n&&i.addTo(n),i.clear(),i}return a(e,t),l(e,[{key:"addTo",value:function(t){return this.manager=t,this.manager.addTween(this),this}},{key:"chain",value:function(t){return t||(t=new e(this.target)),this._chainTween=t,t}},{key:"start",value:function(){return this.active=!0,this}},{key:"stop",value:function(){return this.active=!1,this.emit("stop"),this}},{key:"to",value:function(t){return this._to=t,this}},{key:"from",value:function(t){return this._from=t,this}},{key:"remove",value:function(){return this.manager?(this.manager.removeTween(this),this):this}},{key:"clear",value:function(){this.time=0,this.active=!1,this.easing=g["default"].linear(),this.expire=!1,this.repeat=0,this.loop=!1,this.delay=0,this.pingPong=!1,this.isStarted=!1,this.isEnded=!1,this._to=null,this._from=null,this._delayTime=0,this._elapsedTime=0,this._repeat=0,this._pingPong=!1,this._chainTween=null,this.path=null,this.pathReverse=!1,this.pathFrom=0,this.pathTo=0}},{key:"reset",value:function(){if(this._elapsedTime=0,this._repeat=0,this._delayTime=0,this.isStarted=!1,this.isEnded=!1,this.pingPong&&this._pingPong){var t=this._to,e=this._from;this._to=e,this._from=t,this._pingPong=!1}return this}},{key:"update",value:function(t,e){if(this._canUpdate()||!this._to&&!this.path){var n=void 0,i=void 0;if(this.delay>this._delayTime)return void(this._delayTime+=e);this.isStarted||(this._parseData(),this.isStarted=!0,this.emit("start"));var r=this.pingPong?this.time/2:this.time;if(r>this._elapsedTime){var s=this._elapsedTime+e,o=s>=r;this._elapsedTime=o?r:s,this._apply(r);var a=this._pingPong?r+this._elapsedTime:this._elapsedTime;if(this.emit("update",a),o){if(this.pingPong&&!this._pingPong)return this._pingPong=!0,n=this._to,i=this._from,this._from=n,this._to=i,this.path&&(n=this.pathTo,i=this.pathFrom,this.pathTo=i,this.pathFrom=n),this.emit("pingpong"),void(this._elapsedTime=0);if(this.loop||this.repeat>this._repeat)return this._repeat++,this.emit("repeat",this._repeat),this._elapsedTime=0,void(this.pingPong&&this._pingPong&&(n=this._to,i=this._from,this._to=i,this._from=n,this.path&&(n=this.pathTo,i=this.pathFrom,this.pathTo=i,this.pathFrom=n),this._pingPong=!1));this.isEnded=!0,this.active=!1,this.emit("end"),this._chainTween&&(this._chainTween.addTo(this.manager),this._chainTween.start())}}}}},{key:"_parseData",value:function(){if(!this.isStarted&&(this._from||(this._from={}),h(this._to,this._from,this.target),this.path)){var t=this.path.totalDistance();this.pathReverse?(this.pathFrom=t,this.pathTo=0):(this.pathFrom=0,this.pathTo=t)}}},{key:"_apply",value:function(t){if(u(this._to,this._from,this.target,t,this._elapsedTime,this.easing),this.path){var e=this.pingPong?this.time/2:this.time,n=this.pathFrom,i=this.pathTo-this.pathFrom,r=e,s=this._elapsedTime/r,o=n+i*this.easing(s),a=this.path.getPointAtDistance(o);this.target.position.set(a.x,a.y)}}},{key:"_canUpdate",value:function(){return this.time&&this.active&&this.target}}]),e}(p.utils.EventEmitter);e["default"]=v},function(t,e,n){"use strict";function i(t){return t&&t.__esModule?t:{"default":t}}function r(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}var s=function(){function t(t,e){for(var n=0;n<e.length;n++){var i=e[n];i.enumerable=i.enumerable||!1,i.configurable=!0,"value"in i&&(i.writable=!0),Object.defineProperty(t,i.key,i)}}return function(e,n,i){return n&&t(e.prototype,n),i&&t(e,i),e}}();Object.defineProperty(e,"__esModule",{value:!0});var o=n(3),a=i(o),u=function(){function t(){r(this,t),this.tweens=[],this._tweensToDelete=[],this._last=0}return s(t,[{key:"update",value:function(t){var e=void 0;t||0===t?e=1e3*t:(e=this._getDeltaMS(),t=e/1e3);for(var n=0;n<this.tweens.length;n++){var i=this.tweens[n];i.active&&(i.update(t,e),i.isEnded&&i.expire&&i.remove())}if(this._tweensToDelete.length){for(var n=0;n<this._tweensToDelete.length;n++)this._remove(this._tweensToDelete[n]);this._tweensToDelete.length=0}}},{key:"getTweensForTarget",value:function(t){for(var e=[],n=0;n<this.tweens.length;n++)this.tweens[n].target===t&&e.push(this.tweens[n]);return e}},{key:"createTween",value:function(t){return new a["default"](t,this)}},{key:"addTween",value:function(t){t.manager=this,this.tweens.push(t)}},{key:"removeTween",value:function(t){this._tweensToDelete.push(t)}},{key:"_remove",value:function(t){var e=this.tweens.indexOf(t);-1!==e&&this.tweens.splice(e,1)}},{key:"_getDeltaMS",value:function(){0===this._last&&(this._last=Date.now());var t=Date.now(),e=t-this._last;return this._last=t,e}}]),t}();e["default"]=u},function(t,e,n){"use strict";function i(t){if(t&&t.__esModule)return t;var e={};if(null!=t)for(var n in t)Object.prototype.hasOwnProperty.call(t,n)&&(e[n]=t[n]);return e["default"]=t,e}function r(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}var s=function(){function t(t,e){for(var n=0;n<e.length;n++){var i=e[n];i.enumerable=i.enumerable||!1,i.configurable=!0,"value"in i&&(i.writable=!0),Object.defineProperty(t,i.key,i)}}return function(e,n,i){return n&&t(e.prototype,n),i&&t(e,i),e}}();Object.defineProperty(e,"__esModule",{value:!0});var o=n(1),a=i(o),u=function(){function t(){r(this,t),this._colsed=!1,this.polygon=new a.Polygon,this.polygon.closed=!1,this._tmpPoint=new a.Point,this._tmpPoint2=new a.Point,this._tmpDistance=[],this.currentPath=null,this.graphicsData=[],this.dirty=!0}return s(t,[{key:"moveTo",value:function(t,e){return a.Graphics.prototype.moveTo.call(this,t,e),this.dirty=!0,this}},{key:"lineTo",value:function(t,e){return a.Graphics.prototype.lineTo.call(this,t,e),this.dirty=!0,this}},{key:"bezierCurveTo",value:function(t,e,n,i,r,s){return a.Graphics.prototype.bezierCurveTo.call(this,t,e,n,i,r,s),this.dirty=!0,this}},{key:"quadraticCurveTo",value:function(t,e,n,i){return a.Graphics.prototype.quadraticCurveTo.call(this,t,e,n,i),this.dirty=!0,this}},{key:"arcTo",value:function(t,e,n,i,r){return a.Graphics.prototype.arcTo.call(this,t,e,n,i,r),this.dirty=!0,this}},{key:"arc",value:function(t,e,n,i,r,s){return a.Graphics.prototype.arc.call(this,t,e,n,i,r,s),this.dirty=!0,this}},{key:"drawShape",value:function(t){return a.Graphics.prototype.drawShape.call(this,t),this.dirty=!0,this}},{key:"getPoint",value:function(t){this.parsePoints();var e=this.closed&&t>=this.length-1?0:2*t;return this._tmpPoint.set(this.polygon.points[e],this.polygon.points[e+1]),this._tmpPoint}},{key:"distanceBetween",value:function(t,e){this.parsePoints();var n=this.getPoint(t),i=n.x,r=n.y,s=this.getPoint(e),o=s.x,a=s.y,u=o-i,h=a-r;return Math.sqrt(u*u+h*h)}},{key:"totalDistance",value:function(){this.parsePoints(),this._tmpDistance.length=0,this._tmpDistance.push(0);for(var t=this.length,e=0,n=0;t-1>n;n++)e+=this.distanceBetween(n,n+1),this._tmpDistance.push(e);return e}},{key:"getPointAt",value:function(t){if(this.parsePoints(),t>this.length)return this.getPoint(this.length-1);if(t%1===0)return this.getPoint(t);this._tmpPoint2.set(0,0);var e=t%1,n=this.getPoint(Math.ceil(t)),i=n.x,r=n.y,s=this.getPoint(Math.floor(t)),o=s.x,a=s.y,u=-((o-i)*e),h=-((a-r)*e);return this._tmpPoint2.set(o+u,a+h),this._tmpPoint2}},{key:"getPointAtDistance",value:function(t){this.parsePoints(),this._tmpDistance||this.totalDistance();var e=this._tmpDistance.length,n=0,i=this._tmpDistance[this._tmpDistance.length-1];0>t?t=i+t:t>i&&(t-=i);for(var r=0;e>r&&(t>=this._tmpDistance[r]&&(n=r),!(t<this._tmpDistance[r]));r++);if(n===this.length-1)return this.getPointAt(n);var s=t-this._tmpDistance[n],o=this._tmpDistance[n+1]-this._tmpDistance[n];return this.getPointAt(n+s/o)}},{key:"parsePoints",value:function(){if(!this.dirty)return this;this.dirty=!1,this.polygon.points.length=0;for(var t=0;t<this.graphicsData.length;t++){var e=this.graphicsData[t].shape;e&&e.points&&(this.polygon.points=this.polygon.points.concat(e.points))}return this}},{key:"clear",value:function(){return this.graphicsData.length=0,this.currentPath=null,this.polygon.points.length=0,this._closed=!1,this.dirty=!1,this}},{key:"closed",get:function(){return this._closed},set:function(t){this._closed!==t&&(this.polygon.closed=t,this._closed=t,this.dirty=!0)}},{key:"length",get:function(){return this.polygon.points.length?this.polygon.points.length/2+(this._closed?1:0):0}}]),t}();e["default"]=u},function(t,e,n){"use strict";function i(t){return t&&t.__esModule?t:{"default":t}}function r(t){if(t&&t.__esModule)return t;var e={};if(null!=t)for(var n in t)Object.prototype.hasOwnProperty.call(t,n)&&(e[n]=t[n]);return e["default"]=t,e}Object.defineProperty(e,"__esModule",{value:!0});var s=n(1),o=r(s),a=n(4),u=i(a),h=n(3),c=i(h),l=n(5),f=i(l),p=n(2),d=i(p);o.Graphics.prototype.drawPath=function(t){return t.parsePoints(),this.drawShape(t.polygon),this};var g={TweenManager:u["default"],Tween:c["default"],Easing:d["default"],TweenPath:f["default"]};o.tweenManager||(o.tweenManager=new u["default"],o.tween=g),e["default"]=g}]);
+
+},{}],30:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -4770,7 +5933,7 @@ exports.default = AccessibilityManager;
 core.WebGLRenderer.registerPlugin('accessibility', AccessibilityManager);
 core.CanvasRenderer.registerPlugin('accessibility', AccessibilityManager);
 
-},{"../core":56,"./accessibleTarget":32,"ismobilejs":8}],32:[function(require,module,exports){
+},{"../core":55,"./accessibleTarget":31,"ismobilejs":5}],31:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -4828,7 +5991,7 @@ exports.default = {
   _accessibleDiv: false
 };
 
-},{}],33:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -4853,7 +6016,7 @@ Object.defineProperty(exports, 'AccessibilityManager', {
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-},{"./AccessibilityManager":31,"./accessibleTarget":32}],34:[function(require,module,exports){
+},{"./AccessibilityManager":30,"./accessibleTarget":31}],33:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -5068,7 +6231,7 @@ var Application = function () {
 
 exports.default = Application;
 
-},{"./autoDetectRenderer":36,"./const":37,"./display/Container":39,"./settings":92,"./ticker":111}],35:[function(require,module,exports){
+},{"./autoDetectRenderer":35,"./const":36,"./display/Container":38,"./settings":91,"./ticker":110}],34:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -5132,7 +6295,7 @@ var Shader = function (_GLShader) {
 
 exports.default = Shader;
 
-},{"./settings":92,"pixi-gl-core":19}],36:[function(require,module,exports){
+},{"./settings":91,"pixi-gl-core":16}],35:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -5199,7 +6362,7 @@ function autoDetectRenderer(options, arg1, arg2, arg3) {
     return new _CanvasRenderer2.default(options, arg1, arg2);
 }
 
-},{"./renderers/canvas/CanvasRenderer":68,"./renderers/webgl/WebGLRenderer":75,"./utils":115}],37:[function(require,module,exports){
+},{"./renderers/canvas/CanvasRenderer":67,"./renderers/webgl/WebGLRenderer":74,"./utils":114}],36:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -5542,7 +6705,7 @@ var UPDATE_PRIORITY = exports.UPDATE_PRIORITY = {
   UTILITY: -50
 };
 
-},{}],38:[function(require,module,exports){
+},{}],37:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -5885,7 +7048,7 @@ var Bounds = function () {
 
 exports.default = Bounds;
 
-},{"../math":61}],39:[function(require,module,exports){
+},{"../math":60}],38:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -6503,7 +7666,7 @@ var Container = function (_DisplayObject) {
 exports.default = Container;
 Container.prototype.containerUpdateTransform = Container.prototype.updateTransform;
 
-},{"../utils":115,"./DisplayObject":40}],40:[function(require,module,exports){
+},{"../utils":114,"./DisplayObject":39}],39:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -7195,7 +8358,7 @@ var DisplayObject = function (_EventEmitter) {
 exports.default = DisplayObject;
 DisplayObject.prototype.displayObjectUpdateTransform = DisplayObject.prototype.updateTransform;
 
-},{"../const":37,"../math":61,"../settings":92,"./Bounds":38,"./Transform":41,"./TransformStatic":43,"eventemitter3":7}],41:[function(require,module,exports){
+},{"../const":36,"../math":60,"../settings":91,"./Bounds":37,"./Transform":40,"./TransformStatic":42,"eventemitter3":4}],40:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -7376,7 +8539,7 @@ var Transform = function (_TransformBase) {
 
 exports.default = Transform;
 
-},{"../math":61,"./TransformBase":42}],42:[function(require,module,exports){
+},{"../math":60,"./TransformBase":41}],41:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -7463,7 +8626,7 @@ TransformBase.prototype.updateWorldTransform = TransformBase.prototype.updateTra
 
 TransformBase.IDENTITY = new TransformBase();
 
-},{"../math":61}],43:[function(require,module,exports){
+},{"../math":60}],42:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -7673,7 +8836,7 @@ var TransformStatic = function (_TransformBase) {
 
 exports.default = TransformStatic;
 
-},{"../math":61,"./TransformBase":42}],44:[function(require,module,exports){
+},{"../math":60,"./TransformBase":41}],43:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -8845,7 +10008,7 @@ exports.default = Graphics;
 
 Graphics._SPRITE_TEXTURE = null;
 
-},{"../const":37,"../display/Bounds":38,"../display/Container":39,"../math":61,"../renderers/canvas/CanvasRenderer":68,"../sprites/Sprite":93,"../textures/RenderTexture":104,"../textures/Texture":106,"../utils":115,"./GraphicsData":45,"./utils/bezierCurveTo":47}],45:[function(require,module,exports){
+},{"../const":36,"../display/Bounds":37,"../display/Container":38,"../math":60,"../renderers/canvas/CanvasRenderer":67,"../sprites/Sprite":92,"../textures/RenderTexture":103,"../textures/Texture":105,"../utils":114,"./GraphicsData":44,"./utils/bezierCurveTo":46}],44:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -8967,7 +10130,7 @@ var GraphicsData = function () {
 
 exports.default = GraphicsData;
 
-},{}],46:[function(require,module,exports){
+},{}],45:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -9236,7 +10399,7 @@ exports.default = CanvasGraphicsRenderer;
 
 _CanvasRenderer2.default.registerPlugin('graphics', CanvasGraphicsRenderer);
 
-},{"../../const":37,"../../renderers/canvas/CanvasRenderer":68}],47:[function(require,module,exports){
+},{"../../const":36,"../../renderers/canvas/CanvasRenderer":67}],46:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -9286,7 +10449,7 @@ function bezierCurveTo(fromX, fromY, cpX, cpY, cpX2, cpY2, toX, toY) {
     return path;
 }
 
-},{}],48:[function(require,module,exports){
+},{}],47:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -9551,7 +10714,7 @@ exports.default = GraphicsRenderer;
 
 _WebGLRenderer2.default.registerPlugin('graphics', GraphicsRenderer);
 
-},{"../../const":37,"../../renderers/webgl/WebGLRenderer":75,"../../renderers/webgl/utils/ObjectRenderer":85,"../../utils":115,"./WebGLGraphicsData":49,"./shaders/PrimitiveShader":50,"./utils/buildCircle":51,"./utils/buildPoly":53,"./utils/buildRectangle":54,"./utils/buildRoundedRectangle":55}],49:[function(require,module,exports){
+},{"../../const":36,"../../renderers/webgl/WebGLRenderer":74,"../../renderers/webgl/utils/ObjectRenderer":84,"../../utils":114,"./WebGLGraphicsData":48,"./shaders/PrimitiveShader":49,"./utils/buildCircle":50,"./utils/buildPoly":52,"./utils/buildRectangle":53,"./utils/buildRoundedRectangle":54}],48:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -9694,7 +10857,7 @@ var WebGLGraphicsData = function () {
 
 exports.default = WebGLGraphicsData;
 
-},{"pixi-gl-core":19}],50:[function(require,module,exports){
+},{"pixi-gl-core":16}],49:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -9739,7 +10902,7 @@ var PrimitiveShader = function (_Shader) {
 
 exports.default = PrimitiveShader;
 
-},{"../../../Shader":35}],51:[function(require,module,exports){
+},{"../../../Shader":34}],50:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -9832,7 +10995,7 @@ function buildCircle(graphicsData, webGLData, webGLDataNativeLines) {
     }
 }
 
-},{"../../../const":37,"../../../utils":115,"./buildLine":52}],52:[function(require,module,exports){
+},{"../../../const":36,"../../../utils":114,"./buildLine":51}],51:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -10102,7 +11265,7 @@ function buildNativeLine(graphicsData, webGLData) {
     }
 }
 
-},{"../../../math":61,"../../../utils":115}],53:[function(require,module,exports){
+},{"../../../math":60,"../../../utils":114}],52:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -10188,7 +11351,7 @@ function buildPoly(graphicsData, webGLData, webGLDataNativeLines) {
     }
 }
 
-},{"../../../utils":115,"./buildLine":52,"earcut":6}],54:[function(require,module,exports){
+},{"../../../utils":114,"./buildLine":51,"earcut":3}],53:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -10264,7 +11427,7 @@ function buildRectangle(graphicsData, webGLData, webGLDataNativeLines) {
     }
 }
 
-},{"../../../utils":115,"./buildLine":52}],55:[function(require,module,exports){
+},{"../../../utils":114,"./buildLine":51}],54:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -10420,7 +11583,7 @@ function quadraticBezierCurve(fromX, fromY, cpX, cpY, toX, toY) {
     return points;
 }
 
-},{"../../../utils":115,"./buildLine":52,"earcut":6}],56:[function(require,module,exports){
+},{"../../../utils":114,"./buildLine":51,"earcut":3}],55:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -10797,7 +11960,7 @@ exports.WebGLRenderer = _WebGLRenderer2.default; /**
                                                   * @namespace PIXI
                                                   */
 
-},{"./Application":34,"./Shader":35,"./autoDetectRenderer":36,"./const":37,"./display/Bounds":38,"./display/Container":39,"./display/DisplayObject":40,"./display/Transform":41,"./display/TransformBase":42,"./display/TransformStatic":43,"./graphics/Graphics":44,"./graphics/GraphicsData":45,"./graphics/canvas/CanvasGraphicsRenderer":46,"./graphics/webgl/GraphicsRenderer":48,"./math":61,"./renderers/canvas/CanvasRenderer":68,"./renderers/canvas/utils/CanvasRenderTarget":70,"./renderers/webgl/WebGLRenderer":75,"./renderers/webgl/filters/Filter":77,"./renderers/webgl/filters/spriteMask/SpriteMaskFilter":80,"./renderers/webgl/managers/WebGLManager":84,"./renderers/webgl/utils/ObjectRenderer":85,"./renderers/webgl/utils/Quad":86,"./renderers/webgl/utils/RenderTarget":87,"./settings":92,"./sprites/Sprite":93,"./sprites/canvas/CanvasSpriteRenderer":94,"./sprites/canvas/CanvasTinter":95,"./sprites/webgl/SpriteRenderer":97,"./text/Text":99,"./text/TextMetrics":100,"./text/TextStyle":101,"./textures/BaseRenderTexture":102,"./textures/BaseTexture":103,"./textures/RenderTexture":104,"./textures/Spritesheet":105,"./textures/Texture":106,"./textures/TextureUvs":107,"./textures/VideoBaseTexture":108,"./ticker":111,"./utils":115,"pixi-gl-core":19}],57:[function(require,module,exports){
+},{"./Application":33,"./Shader":34,"./autoDetectRenderer":35,"./const":36,"./display/Bounds":37,"./display/Container":38,"./display/DisplayObject":39,"./display/Transform":40,"./display/TransformBase":41,"./display/TransformStatic":42,"./graphics/Graphics":43,"./graphics/GraphicsData":44,"./graphics/canvas/CanvasGraphicsRenderer":45,"./graphics/webgl/GraphicsRenderer":47,"./math":60,"./renderers/canvas/CanvasRenderer":67,"./renderers/canvas/utils/CanvasRenderTarget":69,"./renderers/webgl/WebGLRenderer":74,"./renderers/webgl/filters/Filter":76,"./renderers/webgl/filters/spriteMask/SpriteMaskFilter":79,"./renderers/webgl/managers/WebGLManager":83,"./renderers/webgl/utils/ObjectRenderer":84,"./renderers/webgl/utils/Quad":85,"./renderers/webgl/utils/RenderTarget":86,"./settings":91,"./sprites/Sprite":92,"./sprites/canvas/CanvasSpriteRenderer":93,"./sprites/canvas/CanvasTinter":94,"./sprites/webgl/SpriteRenderer":96,"./text/Text":98,"./text/TextMetrics":99,"./text/TextStyle":100,"./textures/BaseRenderTexture":101,"./textures/BaseTexture":102,"./textures/RenderTexture":103,"./textures/Spritesheet":104,"./textures/Texture":105,"./textures/TextureUvs":106,"./textures/VideoBaseTexture":107,"./ticker":110,"./utils":114,"pixi-gl-core":16}],56:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -10989,7 +12152,7 @@ var GroupD8 = {
 
 exports.default = GroupD8;
 
-},{"./Matrix":58}],58:[function(require,module,exports){
+},{"./Matrix":57}],57:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -11520,7 +12683,7 @@ var Matrix = function () {
 
 exports.default = Matrix;
 
-},{"./Point":60}],59:[function(require,module,exports){
+},{"./Point":59}],58:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -11637,7 +12800,7 @@ var ObservablePoint = function () {
 
 exports.default = ObservablePoint;
 
-},{}],60:[function(require,module,exports){
+},{}],59:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -11728,7 +12891,7 @@ var Point = function () {
 
 exports.default = Point;
 
-},{}],61:[function(require,module,exports){
+},{}],60:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -11816,7 +12979,7 @@ Object.defineProperty(exports, 'RoundedRectangle', {
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-},{"./GroupD8":57,"./Matrix":58,"./ObservablePoint":59,"./Point":60,"./shapes/Circle":62,"./shapes/Ellipse":63,"./shapes/Polygon":64,"./shapes/Rectangle":65,"./shapes/RoundedRectangle":66}],62:[function(require,module,exports){
+},{"./GroupD8":56,"./Matrix":57,"./ObservablePoint":58,"./Point":59,"./shapes/Circle":61,"./shapes/Ellipse":62,"./shapes/Polygon":63,"./shapes/Rectangle":64,"./shapes/RoundedRectangle":65}],61:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -11930,7 +13093,7 @@ var Circle = function () {
 
 exports.default = Circle;
 
-},{"../../const":37,"./Rectangle":65}],63:[function(require,module,exports){
+},{"../../const":36,"./Rectangle":64}],62:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -12052,7 +13215,7 @@ var Ellipse = function () {
 
 exports.default = Ellipse;
 
-},{"../../const":37,"./Rectangle":65}],64:[function(require,module,exports){
+},{"../../const":36,"./Rectangle":64}],63:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -12183,7 +13346,7 @@ var Polygon = function () {
 
 exports.default = Polygon;
 
-},{"../../const":37,"../Point":60}],65:[function(require,module,exports){
+},{"../../const":36,"../Point":59}],64:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -12446,7 +13609,7 @@ var Rectangle = function () {
 
 exports.default = Rectangle;
 
-},{"../../const":37}],66:[function(require,module,exports){
+},{"../../const":36}],65:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -12579,7 +13742,7 @@ var RoundedRectangle = function () {
 
 exports.default = RoundedRectangle;
 
-},{"../../const":37}],67:[function(require,module,exports){
+},{"../../const":36}],66:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -12942,7 +14105,7 @@ var SystemRenderer = function (_EventEmitter) {
 
 exports.default = SystemRenderer;
 
-},{"../const":37,"../display/Container":39,"../math":61,"../settings":92,"../textures/RenderTexture":104,"../utils":115,"eventemitter3":7}],68:[function(require,module,exports){
+},{"../const":36,"../display/Container":38,"../math":60,"../settings":91,"../textures/RenderTexture":103,"../utils":114,"eventemitter3":4}],67:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -13294,7 +14457,7 @@ var CanvasRenderer = function (_SystemRenderer) {
 exports.default = CanvasRenderer;
 _utils.pluginTarget.mixin(CanvasRenderer);
 
-},{"../../const":37,"../../settings":92,"../../utils":115,"../SystemRenderer":67,"./utils/CanvasMaskManager":69,"./utils/CanvasRenderTarget":70,"./utils/mapCanvasBlendModesToPixi":72}],69:[function(require,module,exports){
+},{"../../const":36,"../../settings":91,"../../utils":114,"../SystemRenderer":66,"./utils/CanvasMaskManager":68,"./utils/CanvasRenderTarget":69,"./utils/mapCanvasBlendModesToPixi":71}],68:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -13462,7 +14625,7 @@ var CanvasMaskManager = function () {
 
 exports.default = CanvasMaskManager;
 
-},{"../../../const":37}],70:[function(require,module,exports){
+},{"../../../const":36}],69:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -13586,7 +14749,7 @@ var CanvasRenderTarget = function () {
 
 exports.default = CanvasRenderTarget;
 
-},{"../../../settings":92}],71:[function(require,module,exports){
+},{"../../../settings":91}],70:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -13647,7 +14810,7 @@ function canUseNewCanvasBlendModes() {
     return data[0] === 255 && data[1] === 0 && data[2] === 0;
 }
 
-},{}],72:[function(require,module,exports){
+},{}],71:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -13719,7 +14882,7 @@ function mapCanvasBlendModesToPixi() {
     return array;
 }
 
-},{"../../../const":37,"./canUseNewCanvasBlendModes":71}],73:[function(require,module,exports){
+},{"../../../const":36,"./canUseNewCanvasBlendModes":70}],72:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -13839,7 +15002,7 @@ var TextureGarbageCollector = function () {
 
 exports.default = TextureGarbageCollector;
 
-},{"../../const":37,"../../settings":92}],74:[function(require,module,exports){
+},{"../../const":36,"../../settings":91}],73:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -14095,7 +15258,7 @@ var TextureManager = function () {
 
 exports.default = TextureManager;
 
-},{"../../const":37,"../../utils":115,"./utils/RenderTarget":87,"pixi-gl-core":19}],75:[function(require,module,exports){
+},{"../../const":36,"../../utils":114,"./utils/RenderTarget":86,"pixi-gl-core":16}],74:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -14895,7 +16058,7 @@ var WebGLRenderer = function (_SystemRenderer) {
 exports.default = WebGLRenderer;
 _utils.pluginTarget.mixin(WebGLRenderer);
 
-},{"../../const":37,"../../textures/BaseTexture":103,"../../utils":115,"../SystemRenderer":67,"./TextureGarbageCollector":73,"./TextureManager":74,"./WebGLState":76,"./managers/FilterManager":81,"./managers/MaskManager":82,"./managers/StencilManager":83,"./utils/ObjectRenderer":85,"./utils/RenderTarget":87,"./utils/mapWebGLDrawModesToPixi":90,"./utils/validateContext":91,"pixi-gl-core":19}],76:[function(require,module,exports){
+},{"../../const":36,"../../textures/BaseTexture":102,"../../utils":114,"../SystemRenderer":66,"./TextureGarbageCollector":72,"./TextureManager":73,"./WebGLState":75,"./managers/FilterManager":80,"./managers/MaskManager":81,"./managers/StencilManager":82,"./utils/ObjectRenderer":84,"./utils/RenderTarget":86,"./utils/mapWebGLDrawModesToPixi":89,"./utils/validateContext":90,"pixi-gl-core":16}],75:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -15175,7 +16338,7 @@ var WebGLState = function () {
 
 exports.default = WebGLState;
 
-},{"./utils/mapWebGLBlendModesToPixi":89}],77:[function(require,module,exports){
+},{"./utils/mapWebGLBlendModesToPixi":88}],76:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -15368,7 +16531,7 @@ var Filter = function () {
 
 exports.default = Filter;
 
-},{"../../../const":37,"../../../settings":92,"../../../utils":115,"./extractUniformsFromSrc":78}],78:[function(require,module,exports){
+},{"../../../const":36,"../../../settings":91,"../../../utils":114,"./extractUniformsFromSrc":77}],77:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -15430,7 +16593,7 @@ function extractUniformsFromString(string) {
     return uniforms;
 }
 
-},{"pixi-gl-core":19}],79:[function(require,module,exports){
+},{"pixi-gl-core":16}],78:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -15512,7 +16675,7 @@ function calculateSpriteMatrix(outputMatrix, filterArea, textureSize, sprite) {
     return mappedMatrix;
 }
 
-},{"../../../math":61}],80:[function(require,module,exports){
+},{"../../../math":60}],79:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -15584,7 +16747,7 @@ var SpriteMaskFilter = function (_Filter) {
 
 exports.default = SpriteMaskFilter;
 
-},{"../../../../math":61,"../Filter":77,"path":12}],81:[function(require,module,exports){
+},{"../../../../math":60,"../Filter":76,"path":9}],80:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -16154,7 +17317,7 @@ var FilterManager = function (_WebGLManager) {
 
 exports.default = FilterManager;
 
-},{"../../../Shader":35,"../../../math":61,"../filters/filterTransforms":79,"../utils/Quad":86,"../utils/RenderTarget":87,"./WebGLManager":84,"bit-twiddle":5}],82:[function(require,module,exports){
+},{"../../../Shader":34,"../../../math":60,"../filters/filterTransforms":78,"../utils/Quad":85,"../utils/RenderTarget":86,"./WebGLManager":83,"bit-twiddle":2}],81:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -16364,7 +17527,7 @@ var MaskManager = function (_WebGLManager) {
 
 exports.default = MaskManager;
 
-},{"../filters/spriteMask/SpriteMaskFilter":80,"./WebGLManager":84}],83:[function(require,module,exports){
+},{"../filters/spriteMask/SpriteMaskFilter":79,"./WebGLManager":83}],82:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -16500,7 +17663,7 @@ var StencilManager = function (_WebGLManager) {
 
 exports.default = StencilManager;
 
-},{"./WebGLManager":84}],84:[function(require,module,exports){
+},{"./WebGLManager":83}],83:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -16555,7 +17718,7 @@ var WebGLManager = function () {
 
 exports.default = WebGLManager;
 
-},{}],85:[function(require,module,exports){
+},{}],84:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -16633,7 +17796,7 @@ var ObjectRenderer = function (_WebGLManager) {
 
 exports.default = ObjectRenderer;
 
-},{"../managers/WebGLManager":84}],86:[function(require,module,exports){
+},{"../managers/WebGLManager":83}],85:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -16814,7 +17977,7 @@ var Quad = function () {
 
 exports.default = Quad;
 
-},{"../../../utils/createIndicesForQuads":113,"pixi-gl-core":19}],87:[function(require,module,exports){
+},{"../../../utils/createIndicesForQuads":112,"pixi-gl-core":16}],86:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -17141,7 +18304,7 @@ var RenderTarget = function () {
 
 exports.default = RenderTarget;
 
-},{"../../../const":37,"../../../math":61,"../../../settings":92,"pixi-gl-core":19}],88:[function(require,module,exports){
+},{"../../../const":36,"../../../math":60,"../../../settings":91,"pixi-gl-core":16}],87:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -17216,7 +18379,7 @@ function generateIfTestSrc(maxIfs) {
     return src;
 }
 
-},{"pixi-gl-core":19}],89:[function(require,module,exports){
+},{"pixi-gl-core":16}],88:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -17265,7 +18428,7 @@ function mapWebGLBlendModesToPixi(gl) {
     return array;
 }
 
-},{"../../../const":37}],90:[function(require,module,exports){
+},{"../../../const":36}],89:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -17297,7 +18460,7 @@ function mapWebGLDrawModesToPixi(gl) {
   return object;
 }
 
-},{"../../../const":37}],91:[function(require,module,exports){
+},{"../../../const":36}],90:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -17313,7 +18476,7 @@ function validateContext(gl) {
     }
 }
 
-},{}],92:[function(require,module,exports){
+},{}],91:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -17548,7 +18711,7 @@ exports.default = {
 
 };
 
-},{"./utils/canUploadSameBuffer":112,"./utils/maxRecommendedTextures":117}],93:[function(require,module,exports){
+},{"./utils/canUploadSameBuffer":111,"./utils/maxRecommendedTextures":116}],92:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -18170,7 +19333,7 @@ var Sprite = function (_Container) {
 
 exports.default = Sprite;
 
-},{"../const":37,"../display/Container":39,"../math":61,"../textures/Texture":106,"../utils":115}],94:[function(require,module,exports){
+},{"../const":36,"../display/Container":38,"../math":60,"../textures/Texture":105,"../utils":114}],93:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -18323,7 +19486,7 @@ exports.default = CanvasSpriteRenderer;
 
 _CanvasRenderer2.default.registerPlugin('sprite', CanvasSpriteRenderer);
 
-},{"../../const":37,"../../math":61,"../../renderers/canvas/CanvasRenderer":68,"./CanvasTinter":95}],95:[function(require,module,exports){
+},{"../../const":36,"../../math":60,"../../renderers/canvas/CanvasRenderer":67,"./CanvasTinter":94}],94:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -18568,7 +19731,7 @@ CanvasTinter.tintMethod = CanvasTinter.canUseMultiply ? CanvasTinter.tintWithMul
 
 exports.default = CanvasTinter;
 
-},{"../../renderers/canvas/utils/canUseNewCanvasBlendModes":71,"../../utils":115}],96:[function(require,module,exports){
+},{"../../renderers/canvas/utils/canUseNewCanvasBlendModes":70,"../../utils":114}],95:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -18621,7 +19784,7 @@ var Buffer = function () {
 
 exports.default = Buffer;
 
-},{}],97:[function(require,module,exports){
+},{}],96:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -19163,7 +20326,7 @@ exports.default = SpriteRenderer;
 
 _WebGLRenderer2.default.registerPlugin('sprite', SpriteRenderer);
 
-},{"../../renderers/webgl/WebGLRenderer":75,"../../renderers/webgl/utils/ObjectRenderer":85,"../../renderers/webgl/utils/checkMaxIfStatmentsInShader":88,"../../settings":92,"../../utils":115,"../../utils/createIndicesForQuads":113,"./BatchBuffer":96,"./generateMultiTextureShader":98,"bit-twiddle":5,"pixi-gl-core":19}],98:[function(require,module,exports){
+},{"../../renderers/webgl/WebGLRenderer":74,"../../renderers/webgl/utils/ObjectRenderer":84,"../../renderers/webgl/utils/checkMaxIfStatmentsInShader":87,"../../settings":91,"../../utils":114,"../../utils/createIndicesForQuads":112,"./BatchBuffer":95,"./generateMultiTextureShader":97,"bit-twiddle":2,"pixi-gl-core":16}],97:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -19226,7 +20389,7 @@ function generateSampleSrc(maxTextures) {
     return src;
 }
 
-},{"../../Shader":35,"path":12}],99:[function(require,module,exports){
+},{"../../Shader":34,"path":9}],98:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -19881,7 +21044,7 @@ var Text = function (_Sprite) {
 
 exports.default = Text;
 
-},{"../const":37,"../math":61,"../settings":92,"../sprites/Sprite":93,"../textures/Texture":106,"../utils":115,"../utils/trimCanvas":120,"./TextMetrics":100,"./TextStyle":101}],100:[function(require,module,exports){
+},{"../const":36,"../math":60,"../settings":91,"../sprites/Sprite":92,"../textures/Texture":105,"../utils":114,"../utils/trimCanvas":119,"./TextMetrics":99,"./TextStyle":100}],99:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -20183,7 +21346,7 @@ TextMetrics._context = canvas.getContext('2d');
  */
 TextMetrics._fonts = {};
 
-},{}],101:[function(require,module,exports){
+},{}],100:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -20717,7 +21880,7 @@ function areArraysEqual(array1, array2) {
     return true;
 }
 
-},{"../const":37,"../utils":115}],102:[function(require,module,exports){
+},{"../const":36,"../utils":114}],101:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -20876,7 +22039,7 @@ var BaseRenderTexture = function (_BaseTexture) {
 
 exports.default = BaseRenderTexture;
 
-},{"../settings":92,"./BaseTexture":103}],103:[function(require,module,exports){
+},{"../settings":91,"./BaseTexture":102}],102:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -21720,7 +22883,7 @@ var BaseTexture = function (_EventEmitter) {
 
 exports.default = BaseTexture;
 
-},{"../settings":92,"../utils":115,"../utils/determineCrossOrigin":114,"bit-twiddle":5,"eventemitter3":7}],104:[function(require,module,exports){
+},{"../settings":91,"../utils":114,"../utils/determineCrossOrigin":113,"bit-twiddle":2,"eventemitter3":4}],103:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -21871,7 +23034,7 @@ var RenderTexture = function (_Texture) {
 
 exports.default = RenderTexture;
 
-},{"./BaseRenderTexture":102,"./Texture":106}],105:[function(require,module,exports){
+},{"./BaseRenderTexture":101,"./Texture":105}],104:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -22132,7 +23295,7 @@ var Spritesheet = function () {
 
 exports.default = Spritesheet;
 
-},{"../":56,"../utils":115}],106:[function(require,module,exports){
+},{"../":55,"../utils":114}],105:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -22807,7 +23970,7 @@ Texture.WHITE = createWhiteTexture();
 removeAllHandlers(Texture.WHITE);
 removeAllHandlers(Texture.WHITE.baseTexture);
 
-},{"../math":61,"../settings":92,"../utils":115,"./BaseTexture":103,"./TextureUvs":107,"./VideoBaseTexture":108,"eventemitter3":7}],107:[function(require,module,exports){
+},{"../math":60,"../settings":91,"../utils":114,"./BaseTexture":102,"./TextureUvs":106,"./VideoBaseTexture":107,"eventemitter3":4}],106:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -22912,7 +24075,7 @@ var TextureUvs = function () {
 
 exports.default = TextureUvs;
 
-},{"../math/GroupD8":57}],108:[function(require,module,exports){
+},{"../math/GroupD8":56}],107:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -23237,7 +24400,7 @@ function createSource(path, type) {
     return source;
 }
 
-},{"../const":37,"../ticker":111,"../utils":115,"./BaseTexture":103}],109:[function(require,module,exports){
+},{"../const":36,"../ticker":110,"../utils":114,"./BaseTexture":102}],108:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -23710,7 +24873,7 @@ var Ticker = function () {
 
 exports.default = Ticker;
 
-},{"../const":37,"../settings":92,"./TickerListener":110}],110:[function(require,module,exports){
+},{"../const":36,"../settings":91,"./TickerListener":109}],109:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -23884,7 +25047,7 @@ var TickerListener = function () {
 
 exports.default = TickerListener;
 
-},{}],111:[function(require,module,exports){
+},{}],110:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -23964,7 +25127,7 @@ shared.destroy = function () {
 exports.shared = shared;
 exports.Ticker = _Ticker2.default;
 
-},{"./Ticker":109}],112:[function(require,module,exports){
+},{"./Ticker":108}],111:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -23978,7 +25141,7 @@ function canUploadSameBuffer() {
 	return !ios;
 }
 
-},{}],113:[function(require,module,exports){
+},{}],112:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -24012,7 +25175,7 @@ function createIndicesForQuads(size) {
     return indices;
 }
 
-},{}],114:[function(require,module,exports){
+},{}],113:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -24068,7 +25231,7 @@ function determineCrossOrigin(url) {
     return '';
 }
 
-},{"url":192}],115:[function(require,module,exports){
+},{"url":191}],114:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -24542,7 +25705,7 @@ function premultiplyTintToRgba(tint, alpha, out, premultiply) {
     return out;
 }
 
-},{"../const":37,"../settings":92,"./mapPremultipliedBlendModes":116,"./mixin":118,"./pluginTarget":119,"eventemitter3":7,"ismobilejs":8,"remove-array-items":185}],116:[function(require,module,exports){
+},{"../const":36,"../settings":91,"./mapPremultipliedBlendModes":115,"./mixin":117,"./pluginTarget":118,"eventemitter3":4,"ismobilejs":5,"remove-array-items":184}],115:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -24585,7 +25748,7 @@ function mapPremultipliedBlendModes() {
     return array;
 }
 
-},{"../const":37}],117:[function(require,module,exports){
+},{"../const":36}],116:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -24607,7 +25770,7 @@ function maxRecommendedTextures(max) {
     return max;
 }
 
-},{"ismobilejs":8}],118:[function(require,module,exports){
+},{"ismobilejs":5}],117:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -24669,7 +25832,7 @@ function performMixins() {
     mixins.length = 0;
 }
 
-},{}],119:[function(require,module,exports){
+},{}],118:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -24735,7 +25898,7 @@ exports.default = {
     }
 };
 
-},{}],120:[function(require,module,exports){
+},{}],119:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -24811,7 +25974,7 @@ function trimCanvas(canvas) {
     };
 }
 
-},{}],121:[function(require,module,exports){
+},{}],120:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -25907,7 +27070,7 @@ function deprecation(core) {
     }
 }
 
-},{}],122:[function(require,module,exports){
+},{}],121:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -26087,7 +27250,7 @@ exports.default = CanvasExtract;
 
 core.CanvasRenderer.registerPlugin('extract', CanvasExtract);
 
-},{"../../core":56}],123:[function(require,module,exports){
+},{"../../core":55}],122:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -26112,7 +27275,7 @@ Object.defineProperty(exports, 'canvas', {
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-},{"./canvas/CanvasExtract":122,"./webgl/WebGLExtract":124}],124:[function(require,module,exports){
+},{"./canvas/CanvasExtract":121,"./webgl/WebGLExtract":123}],123:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -26335,7 +27498,7 @@ exports.default = WebGLExtract;
 
 core.WebGLRenderer.registerPlugin('extract', WebGLExtract);
 
-},{"../../core":56}],125:[function(require,module,exports){
+},{"../../core":55}],124:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -26743,7 +27906,7 @@ var AnimatedSprite = function (_core$Sprite) {
 
 exports.default = AnimatedSprite;
 
-},{"../core":56}],126:[function(require,module,exports){
+},{"../core":55}],125:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -27331,7 +28494,7 @@ exports.default = BitmapText;
 
 BitmapText.fonts = {};
 
-},{"../core":56,"../core/math/ObservablePoint":59,"../core/settings":92}],127:[function(require,module,exports){
+},{"../core":55,"../core/math/ObservablePoint":58,"../core/settings":91}],126:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -27490,7 +28653,7 @@ var TextureTransform = function () {
 
 exports.default = TextureTransform;
 
-},{"../core/math/Matrix":58}],128:[function(require,module,exports){
+},{"../core/math/Matrix":57}],127:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -27942,7 +29105,7 @@ var TilingSprite = function (_core$Sprite) {
 
 exports.default = TilingSprite;
 
-},{"../core":56,"../core/sprites/canvas/CanvasTinter":95,"./TextureTransform":127}],129:[function(require,module,exports){
+},{"../core":55,"../core/sprites/canvas/CanvasTinter":94,"./TextureTransform":126}],128:[function(require,module,exports){
 'use strict';
 
 var _core = require('../core');
@@ -28346,7 +29509,7 @@ DisplayObject.prototype._cacheAsBitmapDestroy = function _cacheAsBitmapDestroy(o
     this.destroy(options);
 };
 
-},{"../core":56,"../core/textures/BaseTexture":103,"../core/textures/Texture":106,"../core/utils":115}],130:[function(require,module,exports){
+},{"../core":55,"../core/textures/BaseTexture":102,"../core/textures/Texture":105,"../core/utils":114}],129:[function(require,module,exports){
 'use strict';
 
 var _core = require('../core');
@@ -28380,7 +29543,7 @@ core.Container.prototype.getChildByName = function getChildByName(name) {
     return null;
 };
 
-},{"../core":56}],131:[function(require,module,exports){
+},{"../core":55}],130:[function(require,module,exports){
 'use strict';
 
 var _core = require('../core');
@@ -28413,7 +29576,7 @@ core.DisplayObject.prototype.getGlobalPosition = function getGlobalPosition() {
     return point;
 };
 
-},{"../core":56}],132:[function(require,module,exports){
+},{"../core":55}],131:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -28474,7 +29637,7 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
 
 // imported for side effect of extending the prototype only, contains no exports
 
-},{"./AnimatedSprite":125,"./BitmapText":126,"./TextureTransform":127,"./TilingSprite":128,"./cacheAsBitmap":129,"./getChildByName":130,"./getGlobalPosition":131,"./webgl/TilingSpriteRenderer":133}],133:[function(require,module,exports){
+},{"./AnimatedSprite":124,"./BitmapText":125,"./TextureTransform":126,"./TilingSprite":127,"./cacheAsBitmap":128,"./getChildByName":129,"./getGlobalPosition":130,"./webgl/TilingSpriteRenderer":132}],132:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -28636,7 +29799,7 @@ exports.default = TilingSpriteRenderer;
 
 core.WebGLRenderer.registerPlugin('tilingSprite', TilingSpriteRenderer);
 
-},{"../../core":56,"../../core/const":37,"path":12}],134:[function(require,module,exports){
+},{"../../core":55,"../../core/const":36,"path":9}],133:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -28810,7 +29973,7 @@ var BlurFilter = function (_core$Filter) {
 
 exports.default = BlurFilter;
 
-},{"../../core":56,"./BlurXFilter":135,"./BlurYFilter":136}],135:[function(require,module,exports){
+},{"../../core":55,"./BlurXFilter":134,"./BlurYFilter":135}],134:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -28976,7 +30139,7 @@ var BlurXFilter = function (_core$Filter) {
 
 exports.default = BlurXFilter;
 
-},{"../../core":56,"./generateBlurFragSource":137,"./generateBlurVertSource":138,"./getMaxBlurKernelSize":139}],136:[function(require,module,exports){
+},{"../../core":55,"./generateBlurFragSource":136,"./generateBlurVertSource":137,"./getMaxBlurKernelSize":138}],135:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -29141,7 +30304,7 @@ var BlurYFilter = function (_core$Filter) {
 
 exports.default = BlurYFilter;
 
-},{"../../core":56,"./generateBlurFragSource":137,"./generateBlurVertSource":138,"./getMaxBlurKernelSize":139}],137:[function(require,module,exports){
+},{"../../core":55,"./generateBlurFragSource":136,"./generateBlurVertSource":137,"./getMaxBlurKernelSize":138}],136:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -29188,7 +30351,7 @@ function generateFragBlurSource(kernelSize) {
     return fragSource;
 }
 
-},{}],138:[function(require,module,exports){
+},{}],137:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -29232,7 +30395,7 @@ function generateVertBlurSource(kernelSize, x) {
     return vertSource;
 }
 
-},{}],139:[function(require,module,exports){
+},{}],138:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -29248,7 +30411,7 @@ function getMaxKernelSize(gl) {
     return kernelSize;
 }
 
-},{}],140:[function(require,module,exports){
+},{}],139:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -29799,7 +30962,7 @@ var ColorMatrixFilter = function (_core$Filter) {
 exports.default = ColorMatrixFilter;
 ColorMatrixFilter.prototype.grayscale = ColorMatrixFilter.prototype.greyscale;
 
-},{"../../core":56,"path":12}],141:[function(require,module,exports){
+},{"../../core":55,"path":9}],140:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -29909,7 +31072,7 @@ var DisplacementFilter = function (_core$Filter) {
 
 exports.default = DisplacementFilter;
 
-},{"../../core":56,"path":12}],142:[function(require,module,exports){
+},{"../../core":55,"path":9}],141:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -29963,7 +31126,7 @@ var FXAAFilter = function (_core$Filter) {
 
 exports.default = FXAAFilter;
 
-},{"../../core":56,"path":12}],143:[function(require,module,exports){
+},{"../../core":55,"path":9}],142:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -30042,7 +31205,7 @@ Object.defineProperty(exports, 'VoidFilter', {
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-},{"./blur/BlurFilter":134,"./blur/BlurXFilter":135,"./blur/BlurYFilter":136,"./colormatrix/ColorMatrixFilter":140,"./displacement/DisplacementFilter":141,"./fxaa/FXAAFilter":142,"./noise/NoiseFilter":144,"./void/VoidFilter":145}],144:[function(require,module,exports){
+},{"./blur/BlurFilter":133,"./blur/BlurXFilter":134,"./blur/BlurYFilter":135,"./colormatrix/ColorMatrixFilter":139,"./displacement/DisplacementFilter":140,"./fxaa/FXAAFilter":141,"./noise/NoiseFilter":143,"./void/VoidFilter":144}],143:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -30139,7 +31302,7 @@ var NoiseFilter = function (_core$Filter) {
 
 exports.default = NoiseFilter;
 
-},{"../../core":56,"path":12}],145:[function(require,module,exports){
+},{"../../core":55,"path":9}],144:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -30189,7 +31352,7 @@ var VoidFilter = function (_core$Filter) {
 
 exports.default = VoidFilter;
 
-},{"../../core":56,"path":12}],146:[function(require,module,exports){
+},{"../../core":55,"path":9}],145:[function(require,module,exports){
 (function (global){
 'use strict';
 
@@ -30303,7 +31466,7 @@ if (typeof _deprecation2.default === 'function') {
 global.PIXI = exports; // eslint-disable-line
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./accessibility":33,"./core":56,"./deprecation":121,"./extract":123,"./extras":132,"./filters":143,"./interaction":151,"./loaders":154,"./mesh":163,"./particles":166,"./polyfill":172,"./prepare":176}],147:[function(require,module,exports){
+},{"./accessibility":32,"./core":55,"./deprecation":120,"./extract":122,"./extras":131,"./filters":142,"./interaction":150,"./loaders":153,"./mesh":162,"./particles":165,"./polyfill":171,"./prepare":175}],146:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -30527,7 +31690,7 @@ var InteractionData = function () {
 
 exports.default = InteractionData;
 
-},{"../core":56}],148:[function(require,module,exports){
+},{"../core":55}],147:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -30612,7 +31775,7 @@ var InteractionEvent = function () {
 
 exports.default = InteractionEvent;
 
-},{}],149:[function(require,module,exports){
+},{}],148:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -32372,7 +33535,7 @@ exports.default = InteractionManager;
 core.WebGLRenderer.registerPlugin('interaction', InteractionManager);
 core.CanvasRenderer.registerPlugin('interaction', InteractionManager);
 
-},{"../core":56,"./InteractionData":147,"./InteractionEvent":148,"./InteractionTrackingData":150,"./interactiveTarget":152,"eventemitter3":7}],150:[function(require,module,exports){
+},{"../core":55,"./InteractionData":146,"./InteractionEvent":147,"./InteractionTrackingData":149,"./interactiveTarget":151,"eventemitter3":4}],149:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -32548,7 +33711,7 @@ InteractionTrackingData.FLAGS = Object.freeze({
     RIGHT_DOWN: 1 << 2
 });
 
-},{}],151:[function(require,module,exports){
+},{}],150:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -32600,7 +33763,7 @@ Object.defineProperty(exports, 'InteractionEvent', {
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-},{"./InteractionData":147,"./InteractionEvent":148,"./InteractionManager":149,"./InteractionTrackingData":150,"./interactiveTarget":152}],152:[function(require,module,exports){
+},{"./InteractionData":146,"./InteractionEvent":147,"./InteractionManager":148,"./InteractionTrackingData":149,"./interactiveTarget":151}],151:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -32717,7 +33880,7 @@ exports.default = {
   _trackedPointers: undefined
 };
 
-},{}],153:[function(require,module,exports){
+},{}],152:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -32809,7 +33972,7 @@ function parse(resource, texture) {
     resource.bitmapFont = _extras.BitmapText.registerFont(resource.data, texture);
 }
 
-},{"../core":56,"../extras":132,"path":12,"resource-loader":190}],154:[function(require,module,exports){
+},{"../core":55,"../extras":131,"path":9,"resource-loader":189}],153:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -32937,7 +34100,7 @@ AppPrototype.destroy = function destroy(removeView) {
     this._parentDestroy(removeView);
 };
 
-},{"../core/Application":34,"./bitmapFontParser":153,"./loader":155,"./spritesheetParser":156,"./textureParser":157,"resource-loader":190}],155:[function(require,module,exports){
+},{"../core/Application":33,"./bitmapFontParser":152,"./loader":154,"./spritesheetParser":155,"./textureParser":156,"resource-loader":189}],154:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -33108,7 +34271,7 @@ var Resource = _resourceLoader2.default.Resource;
 
 Resource.setExtensionXhrType('fnt', Resource.XHR_RESPONSE_TYPE.DOCUMENT);
 
-},{"./bitmapFontParser":153,"./spritesheetParser":156,"./textureParser":157,"eventemitter3":7,"resource-loader":190,"resource-loader/lib/middlewares/parsing/blob":191}],156:[function(require,module,exports){
+},{"./bitmapFontParser":152,"./spritesheetParser":155,"./textureParser":156,"eventemitter3":4,"resource-loader":189,"resource-loader/lib/middlewares/parsing/blob":190}],155:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -33167,7 +34330,7 @@ function getResourcePath(resource, baseUrl) {
     return _url2.default.resolve(resource.url.replace(baseUrl, ''), resource.data.meta.image);
 }
 
-},{"../core":56,"resource-loader":190,"url":192}],157:[function(require,module,exports){
+},{"../core":55,"resource-loader":189,"url":191}],156:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -33190,7 +34353,7 @@ var _Texture2 = _interopRequireDefault(_Texture);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-},{"../core/textures/Texture":106,"resource-loader":190}],158:[function(require,module,exports){
+},{"../core/textures/Texture":105,"resource-loader":189}],157:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -33558,7 +34721,7 @@ Mesh.DRAW_MODES = {
   TRIANGLES: 1
 };
 
-},{"../core":56,"../extras/TextureTransform":127}],159:[function(require,module,exports){
+},{"../core":55,"../extras/TextureTransform":126}],158:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -33944,7 +35107,7 @@ var NineSlicePlane = function (_Plane) {
 
 exports.default = NineSlicePlane;
 
-},{"./Plane":160}],160:[function(require,module,exports){
+},{"./Plane":159}],159:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -34083,7 +35246,7 @@ var Plane = function (_Mesh) {
 
 exports.default = Plane;
 
-},{"./Mesh":158}],161:[function(require,module,exports){
+},{"./Mesh":157}],160:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -34319,7 +35482,7 @@ var Rope = function (_Mesh) {
 
 exports.default = Rope;
 
-},{"./Mesh":158}],162:[function(require,module,exports){
+},{"./Mesh":157}],161:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -34601,7 +35764,7 @@ exports.default = MeshSpriteRenderer;
 
 core.CanvasRenderer.registerPlugin('mesh', MeshSpriteRenderer);
 
-},{"../../core":56,"../Mesh":158}],163:[function(require,module,exports){
+},{"../../core":55,"../Mesh":157}],162:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -34662,7 +35825,7 @@ Object.defineProperty(exports, 'Rope', {
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-},{"./Mesh":158,"./NineSlicePlane":159,"./Plane":160,"./Rope":161,"./canvas/CanvasMeshRenderer":162,"./webgl/MeshRenderer":164}],164:[function(require,module,exports){
+},{"./Mesh":157,"./NineSlicePlane":158,"./Plane":159,"./Rope":160,"./canvas/CanvasMeshRenderer":161,"./webgl/MeshRenderer":163}],163:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -34813,7 +35976,7 @@ exports.default = MeshRenderer;
 
 core.WebGLRenderer.registerPlugin('mesh', MeshRenderer);
 
-},{"../../core":56,"../Mesh":158,"path":12,"pixi-gl-core":19}],165:[function(require,module,exports){
+},{"../../core":55,"../Mesh":157,"path":9,"pixi-gl-core":16}],164:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -35184,7 +36347,7 @@ var ParticleContainer = function (_core$Container) {
 
 exports.default = ParticleContainer;
 
-},{"../core":56,"../core/utils":115}],166:[function(require,module,exports){
+},{"../core":55,"../core/utils":114}],165:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -35209,7 +36372,7 @@ Object.defineProperty(exports, 'ParticleRenderer', {
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-},{"./ParticleContainer":165,"./webgl/ParticleRenderer":168}],167:[function(require,module,exports){
+},{"./ParticleContainer":164,"./webgl/ParticleRenderer":167}],166:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -35449,7 +36612,7 @@ var ParticleBuffer = function () {
 
 exports.default = ParticleBuffer;
 
-},{"../../core/utils/createIndicesForQuads":113,"pixi-gl-core":19}],168:[function(require,module,exports){
+},{"../../core/utils/createIndicesForQuads":112,"pixi-gl-core":16}],167:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -35894,7 +37057,7 @@ exports.default = ParticleRenderer;
 
 core.WebGLRenderer.registerPlugin('particle', ParticleRenderer);
 
-},{"../../core":56,"./ParticleBuffer":167,"./ParticleShader":169}],169:[function(require,module,exports){
+},{"../../core":55,"./ParticleBuffer":166,"./ParticleShader":168}],168:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -35937,7 +37100,7 @@ var ParticleShader = function (_Shader) {
 
 exports.default = ParticleShader;
 
-},{"../../core/Shader":35}],170:[function(require,module,exports){
+},{"../../core/Shader":34}],169:[function(require,module,exports){
 "use strict";
 
 // References:
@@ -35955,7 +37118,7 @@ if (!Math.sign) {
     };
 }
 
-},{}],171:[function(require,module,exports){
+},{}],170:[function(require,module,exports){
 'use strict';
 
 var _objectAssign = require('object-assign');
@@ -35970,7 +37133,7 @@ if (!Object.assign) {
 // https://github.com/sindresorhus/object-assign
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/assign
 
-},{"object-assign":10}],172:[function(require,module,exports){
+},{"object-assign":7}],171:[function(require,module,exports){
 'use strict';
 
 require('./Object.assign');
@@ -35995,7 +37158,7 @@ if (!window.Uint16Array) {
     window.Uint16Array = Array;
 }
 
-},{"./Math.sign":170,"./Object.assign":171,"./requestAnimationFrame":173}],173:[function(require,module,exports){
+},{"./Math.sign":169,"./Object.assign":170,"./requestAnimationFrame":172}],172:[function(require,module,exports){
 (function (global){
 'use strict';
 
@@ -36072,7 +37235,7 @@ if (!global.cancelAnimationFrame) {
 }
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],174:[function(require,module,exports){
+},{}],173:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -36560,7 +37723,7 @@ function findTextStyle(item, queue) {
     return false;
 }
 
-},{"../core":56,"./limiters/CountLimiter":177}],175:[function(require,module,exports){
+},{"../core":55,"./limiters/CountLimiter":176}],174:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -36680,7 +37843,7 @@ function uploadBaseTextures(prepare, item) {
 
 core.CanvasRenderer.registerPlugin('prepare', CanvasPrepare);
 
-},{"../../core":56,"../BasePrepare":174}],176:[function(require,module,exports){
+},{"../../core":55,"../BasePrepare":173}],175:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -36732,7 +37895,7 @@ Object.defineProperty(exports, 'TimeLimiter', {
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-},{"./BasePrepare":174,"./canvas/CanvasPrepare":175,"./limiters/CountLimiter":177,"./limiters/TimeLimiter":178,"./webgl/WebGLPrepare":179}],177:[function(require,module,exports){
+},{"./BasePrepare":173,"./canvas/CanvasPrepare":174,"./limiters/CountLimiter":176,"./limiters/TimeLimiter":177,"./webgl/WebGLPrepare":178}],176:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -36790,7 +37953,7 @@ var CountLimiter = function () {
 
 exports.default = CountLimiter;
 
-},{}],178:[function(require,module,exports){
+},{}],177:[function(require,module,exports){
 "use strict";
 
 exports.__esModule = true;
@@ -36848,7 +38011,7 @@ var TimeLimiter = function () {
 
 exports.default = TimeLimiter;
 
-},{}],179:[function(require,module,exports){
+},{}],178:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -36970,7 +38133,7 @@ function findGraphics(item, queue) {
 
 core.WebGLRenderer.registerPlugin('prepare', WebGLPrepare);
 
-},{"../../core":56,"../BasePrepare":174}],180:[function(require,module,exports){
+},{"../../core":55,"../BasePrepare":173}],179:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -37156,7 +38319,7 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],181:[function(require,module,exports){
+},{}],180:[function(require,module,exports){
 (function (global){
 /*! https://mths.be/punycode v1.4.1 by @mathias */
 ;(function(root) {
@@ -37693,7 +38856,7 @@ process.umask = function() { return 0; };
 }(this));
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],182:[function(require,module,exports){
+},{}],181:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -37779,7 +38942,7 @@ var isArray = Array.isArray || function (xs) {
   return Object.prototype.toString.call(xs) === '[object Array]';
 };
 
-},{}],183:[function(require,module,exports){
+},{}],182:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -37866,13 +39029,13 @@ var objectKeys = Object.keys || function (obj) {
   return res;
 };
 
-},{}],184:[function(require,module,exports){
+},{}],183:[function(require,module,exports){
 'use strict';
 
 exports.decode = exports.parse = require('./decode');
 exports.encode = exports.stringify = require('./encode');
 
-},{"./decode":182,"./encode":183}],185:[function(require,module,exports){
+},{"./decode":181,"./encode":182}],184:[function(require,module,exports){
 'use strict'
 
 /**
@@ -37902,7 +39065,7 @@ module.exports = function removeItems(arr, startIdx, removeCount)
   arr.length = len
 }
 
-},{}],186:[function(require,module,exports){
+},{}],185:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -38520,7 +39683,7 @@ var Loader = function () {
 
 exports.default = Loader;
 
-},{"./Resource":187,"./async":188,"mini-signals":9,"parse-uri":11}],187:[function(require,module,exports){
+},{"./Resource":186,"./async":187,"mini-signals":6,"parse-uri":8}],186:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -39676,7 +40839,7 @@ function reqType(xhr) {
     return xhr.toString().replace('object ', '');
 }
 
-},{"mini-signals":9,"parse-uri":11}],188:[function(require,module,exports){
+},{"mini-signals":6,"parse-uri":8}],187:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -39885,7 +41048,7 @@ function queue(worker, concurrency) {
     return q;
 }
 
-},{}],189:[function(require,module,exports){
+},{}],188:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -39953,7 +41116,7 @@ function encodeBinary(input) {
     return output;
 }
 
-},{}],190:[function(require,module,exports){
+},{}],189:[function(require,module,exports){
 'use strict';
 
 // import Loader from './Loader';
@@ -39977,7 +41140,7 @@ module.exports = Loader;
 // export default Loader;
 module.exports.default = Loader;
 
-},{"./Loader":186,"./Resource":187,"./async":188,"./b64":189}],191:[function(require,module,exports){
+},{"./Loader":185,"./Resource":186,"./async":187,"./b64":188}],190:[function(require,module,exports){
 'use strict';
 
 exports.__esModule = true;
@@ -40065,7 +41228,7 @@ function blobMiddlewareFactory() {
     };
 }
 
-},{"../../Resource":187,"../../b64":189}],192:[function(require,module,exports){
+},{"../../Resource":186,"../../b64":188}],191:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -40799,7 +41962,7 @@ Url.prototype.parseHost = function() {
   if (host) this.hostname = host;
 };
 
-},{"./util":193,"punycode":181,"querystring":184}],193:[function(require,module,exports){
+},{"./util":192,"punycode":180,"querystring":183}],192:[function(require,module,exports){
 'use strict';
 
 module.exports = {
@@ -40817,7 +41980,1006 @@ module.exports = {
   }
 };
 
+},{}],193:[function(require,module,exports){
+/**
+ * Cutscene Scripts:
+ * Each action is an object with a "command" string for the action to perform, a "wait" boolean for whether or not to
+ * wait until the action is complete before continuing, and any other parameters the command might need (sometimes optional)
+ * e.g. { "action": "move", "target": "protagonist", "position": 2, "wait": true }
+ * 
+ * Default commands:
+ * run {script} - takes a new script object to be run in parallel with the rest of the cutscene. Only useful with "wait" set to "false"
+ * add {name} {id} [position] [facingLeft] [emote] - adds a puppet with the given name at the given position, assigns it the given id for later reference, and optionally overrides initial state
+ * set {target} {name} - changes the given puppet (using assigned ids) to a new puppet with the given name
+ * remove {target} - removes a given puppet from the stage
+ * delay {duration} - simply waits, should generally be used as a ";" action
+ * move {target} {position} - moves puppet to a new position
+ * facingLeft {target} {facingLeft} - forces puppet direction
+ * babble {target} [start/stop/toggle] - makes a puppet start or stop babbling. Default is toggle
+ * emote {target} [emote] - makes a puppet switch to a given emote. Default is 'default'
+ * jiggle {target} - causes a given puppet to jiggle
+ *
+ * Actions are defined in the cutscene's "actions" object. You can add functions to that object to add custom actions.
+ * The function will be passed a callback function to be called when the action is complete, as well as the action object with all the parameters in it
+ * You can use `this` to access references to the stage and actors
+ *
+ * To start the cutscene, just call cutscene.start()
+ *
+ * @class
+ */
+class Cutscene {
+
+    /**
+     * @constructor
+     * @param {Stage} stage - the stage this puppet will be attached to
+     * @param {Object[]} script - the script for the cutscene
+     * @param {Object} actors - dictionary of actors (e.g. each member is "name": Character)
+     * @param {requestCallback} callback - function to be called after cutscene finishes (either successfully or after an error)
+     */
+    constructor(stage, script, actors, callback) {
+        this.stage = stage
+        this.actors = actors
+
+        this.start = function() {this.parseNextAction(script, callback)}
+
+        this.actions = {
+            run: function(callback, action) {
+                if (action.wait) {
+                    this.parseNextAction(action.script, callback)
+                } else {
+                    this.parseNextAction(action.script, this.empty)
+                    requestAnimationFrame(callback)
+                }
+            },
+            add: function(callback, action) {
+                if (this.stage.getPuppet(action.id)) throw new Error("Actor already on stage!")
+                if (!(action.name in this.actors)) throw new Error("Could not find puppet with that name!")
+
+                // Copy our actor from our actors object
+                let actor = JSON.parse(JSON.stringify(this.actors[action.name]))
+                
+                // If optional parameters are set, apply them to our actor
+                if (action.hasOwnProperty('position')) actor.position = action.position
+                if (action.hasOwnProperty('facingLeft')) actor.facingLeft = action.facingLeft
+                if (action.hasOwnProperty('emote')) actor.emote = action.emote
+
+                // Add our actor to the stage
+                this.stage.addPuppet(actor, action.id).name = action.name
+                callback()
+            },
+            set: function(callback, action) {
+                if (!this.stage.getPuppet(action.target)) throw new Error("Actor not present on stage!")
+                if (!(action.name in this.actors)) throw new Error("Could not find puppet with that name!")
+
+                this.stage.setPuppet(action.target, this.stage.createPuppet(this.actors[action.name])).name = action.name
+                callback()
+            },
+            remove: function(callback, action) {
+                if (!this.stage.getPuppet(action.target)) throw new Error("Actor not present on stage!")
+
+                this.stage.removePuppet(action.target)
+                callback()
+            },
+            delay: function(callback, action) {
+                if (action.delay <= 0) requestAnimationFrame(callback)
+                else {
+                    let timer = PIXI.timerManager.createTimer(action.delay)
+                    timer.on('end', callback)
+                    timer.start()
+                }
+            },
+            move: function(callback, action) {
+                if (!this.stage.getPuppet(action.target)) throw new Error("Actor not present on stage!")
+                
+                let puppet = this.stage.getPuppet(action.target)
+                if (puppet.target == puppet.position && puppet.position == action.position) {
+                    callback()
+                    return
+                }
+                
+                puppet.target = action.position
+                puppet.movingAnim = 0
+                if (action.position > puppet.position) {
+                    puppet.facingLeft = false
+                    puppet.container.scale.x = this.stage.environment.puppetScale
+                } else if (action.position != puppet.position) {
+                    puppet.facingLeft = true
+                    puppet.container.scale.x = -this.stage.environment.puppetScale
+                }
+                this.actions.delay(callback, { delay: (Math.abs(puppet.target - puppet.position) * this.stage.MOVE_DURATION * 0.6 + this.stage.MOVE_DURATION * 0.4) * 1000, parent: action })
+            },
+            facingLeft: function(callback, action) {
+                if (!this.stage.getPuppet(action.target)) throw new Error("Actor not present on stage!")
+                
+                let puppet = this.stage.getPuppet(action.target)
+                puppet.facingLeft = action.facingLeft
+                puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * this.stage.environment.puppetScale
+                callback()
+            },
+            babble: function(callback, action) {
+                if (!this.stage.getPuppet(action.target)) throw new Error("Actor not present on stage!")
+                
+                let puppet = this.stage.getPuppet(action.target)
+                let babble = (action.action || "toggle") === "toggle" ? !puppet.babbling : action.action === "start"
+                puppet.setBabbling(babble)
+                callback()
+            },
+            emote: function(callback, action) {
+                if (!this.stage.getPuppet(action.target)) throw new Error("Actor not present on stage!")
+                
+                this.stage.getPuppet(action.target).changeEmote(action.emote || "0")
+                callback()
+            },
+            jiggle: function(callback, action) {
+                if (!this.stage.getPuppet(action.target)) throw new Error("Actor not present on stage!")
+                
+                this.stage.getPuppet(action.target).jiggle()
+                this.actions.delay(callback, { delay: this.stage.MOVE_DURATION * 0.4 * 1000, parent: action })
+            }
+        }
+    }
+
+    parseNextAction(script, callback) {
+        // Check if script is complete
+        if (script.length === 0) {
+            // Cutscene finished successully
+            if (callback) requestAnimationFrame(callback)
+            return
+        }
+
+        // Parse current line of script
+        let action = script[0]
+
+        // Confirm command exists
+        if (!action || !this.actions.hasOwnProperty(action.command)) {
+            // Invalid command, end cutscene
+            if (callback) requestAnimationFrame(callback)
+            return
+        }
+
+        // Run action
+        if (action.wait) {
+            // Complete this action before proceeding
+            let newCallback = function() {
+                this.parseNextAction(script.slice(1), callback)
+            }.bind(this)
+            this.actions[action.command].call(this, newCallback, action)
+        } else {
+            // Perform this action and immediately continue
+            this.actions[action.command].call(this, this.empty, action)
+            this.parseNextAction(script.slice(1), callback)
+        }
+    }
+
+    // Used for callbacks that don't need to do anything. 
+    // Used so actions don't need to deal with undefined or null callbacks, 
+    //  and to not mess up the parameter order
+    empty() {}
+}
+
+module.exports = Cutscene
+
 },{}],194:[function(require,module,exports){
+// imports
+const PIXI = require('pixi.js')
+
+// Aliases
+let Container = PIXI.Container
+
+/**
+ * @class
+ */
+class Puppet {
+
+    // Give it a layer and what it inherited, and it'll return
+    // what the layer's children will inherit
+    static getInherit(layer, inherit) {
+        return Object.assign((({ head, emote, emoteLayer }) =>
+            ({ head, emote, emoteLayer }))(layer), inherit)
+    }
+
+    // If you pass this function an assets object, a root layer, and a layer handler
+    // it'll run through every child of that layer recursively and run that
+    // layer handler on every layer. Handles asset bundles and ignores
+    // recursive asset bundles
+    // If you ever want it to stop after handling a specific layer, just have
+    // the layer handler return true when it should stop
+    // Note this is only for working on layer data, not layers on the Puppet container
+    static handleLayer(assets, layer, handleLayer, bundles = []) {
+        if (handleLayer(layer, bundles))
+            return true
+        if (layer.children)
+            return layer.children.find(l => Puppet.handleLayer(assets, l, handleLayer, bundles))
+        if (layer.id in assets && assets[layer.id].type === 'bundle' && !bundles.includes(layer.id))
+            return assets[layer.id].layers.children.find(l => Puppet.handleLayer(assets, l, handleLayer, [...bundles, layer.id]))
+    }
+
+    static createTween(layer, container) {
+        let tween = PIXI.tweenManager.createTween(container)
+        const easing = layer.easing in PIXI.tween.Easing ? layer.easing : 'linear'
+        tween.easing = PIXI.tween.Easing[easing]()
+        tween.time = layer.duration || 1000
+        tween.delay = layer.delay || 0
+        tween.expire = true
+        switch (layer.animation) {
+        case 'FADE_ZOOM':
+            container.alpha = 0
+            container.scale.x = 1.5
+            container.scale.y = 1.5
+            tween.from({
+                alpha: 0,
+                scale: { x: 1.5, y: 1.5 }
+            })
+            tween.to({
+                alpha: 1,
+                scale: { x: 1, y: 1 }
+            })
+            break
+        case 'FADE':
+            container.alpha = 0
+            tween.from({
+                alpha: 0
+            })
+            tween.to({
+                alpha: 1
+            })
+            break
+        default:
+            return container
+        }
+        tween.start()
+        return tween
+    }
+
+    /**
+     * @constructor
+     * @param {Stage} stage - the stage this puppet will be attached to
+     * @param {Object} puppet - object with all the data to construct the puppet
+     * @param {number} id - UUID to refer to this puppet later
+     */
+    constructor(stage, puppet, id) {
+        // Init Variables
+        this.babbling = false
+        this.puppet = puppet
+        this.stage = stage
+        this.id = id
+        this.container = new Container()
+        this.position = this.target = puppet.position
+        this.facingLeft = puppet.facingLeft
+        this.deadbonesStyle = puppet.deadbonesStyle
+        this.movingAnim = this.eyesAnim = this.mouthAnim = this.deadbonesAnim = 0
+        this.eyesDuration = this.mouthDuration = this.deadbonesDuration = 0
+        this.deadbonesTargetY = this.deadbonesStartY = 0
+        this.deadbonesTargetRotation = this.deadbonesStartRotation = 0
+        this.eyeBabbleDuration = puppet.eyeBabbleDuration || 2000
+        this.mouthBabbleDuration = puppet.mouthBabbleDuration || 270
+        this.direction = 0
+        this.head = []
+        this.particles = []
+        this.emotes = { }
+
+        // Construct Puppet
+        this.container.addChild(this.createLayer(puppet.layers))
+
+        // Finish Setup
+        this.changeEmote(puppet.emote)
+
+        // Place Puppet on Stage
+        this.container.interactive = true
+        this.container.puppet = this
+        this.container.id = id
+        this.container.y = stage.screen.clientHeight / stage.puppetStage.scale.y
+        this.container.x = (this.position - 0.5) * stage.slotWidth
+        this.container.scale.x = this.container.scale.y =
+            (stage.environment.puppetScale || 1) 
+        this.container.scale.x *= this.facingLeft ? -1 : 1
+    }
+
+    createLayer(layer, inherit = {}) {
+        const container = new Container()
+        container.asset = layer
+        Object.keys(layer).forEach(k => {if (!(k in container)) container[k] = layer[k]})
+        Object.keys(inherit).forEach(k => inherit[k] == null && delete inherit[k])
+        Object.keys(inherit).forEach(k => {if (!(k in container)) container[k] = inherit[k]})
+
+        if (layer.head != null) {
+            if (inherit.head == null) {
+                this.head.push(container)
+            } else if (this.stage.status) {
+                this.stage.status.warn(`[${this.puppet.name}] Attempting to make layer '${layer.name}' a head layer but is already inside one. Ignoring...`)
+            }
+        }
+
+        // Check if we're trying to add an emote that already exists
+        if (inherit.emote == null && layer.emote != null && layer.emote in this.emotes) {
+            if (this.stage.status)
+                this.stage.status.warn(`[${this.puppet.name}] Attempting to create emote '${layer.name}' (${layer.emote}) but emote '${this.emotes[layer.emote].name}' (${layer.emote}) already exists. Ignoring...`)
+        // Otherwise, check if we're trying to add an emote or are in an emote
+        } else if (layer.emote != null || inherit.emote != null) {
+            // If we're the first layer with an emote...
+            if (inherit.emote == null) {
+                this.emotes[layer.emote] = {
+                    name: layer.name,
+                    base: [],
+                    eyes: [],
+                    mouth: []
+                }
+
+                // And add us to that emote's right emoteLayer
+                if (layer.emoteLayer)
+                    this.emotes[layer.emote][layer.emoteLayer].push(container)
+
+                if (this.stage.status)
+                    this.stage.status.info(`[${this.puppet.name}] Creating emote '${layer.name}' (${layer.emote})`)
+            }
+
+            // If they told us to be a specific emote, but we're already inside an emote, send a warning
+            if (this.stage.status && layer.emote != null && inherit.emote != null) {
+                this.stage.status.warn(`[${this.puppet.name}] Attempting to place emote '${layer.name}' (${layer.emote}) inside emote '${this.emotes[inherit.emote].name}' (${inherit.emote}). Ignoring...`)
+            }
+
+            // If we're not the first layer with a specific emote, and specify an emote Layer...
+            if (layer.emote == null && layer.emoteLayer != null) {
+                // check if we're already inside an emoteLayer. If we aren't, add ourselves to that emoteLayer
+                // If we already are in one, send a warning
+                if (inherit.emoteLayer == null) {
+                    this.emotes[inherit.emote][layer.emoteLayer].push(container)
+                } else if (this.stage.status) {
+                    this.stage.status.warn(`[${this.puppet.name}] Attempting to place a${layer.emoteLayer === 'mouth' ? ' mouth' : 'n eyes'} layer '${layer.name}' inside a${inherit.emoteLayer === 'mouth' ? ' mouth' : 'n eyes'}. Ignoring...`)
+                }
+            }
+
+            // If we are an asset layer and aren't in an emote layer yet, add us to the base one
+            if ('id' in layer && layer.emoteLayer == null && inherit.emoteLayer == null)
+                this.emotes[inherit.emote == null ? layer.emote : inherit.emote].base.push(container)
+        }
+
+        // Add children or asset
+        if (layer.children || (layer.id in this.stage.assets && this.stage.assets[layer.id].type === 'bundle')) {
+            if (!layer.children) {
+                if (inherit.bundles != null && inherit.bundles.includes(layer.id)) {
+                    // TODO would people be interested in allowing recursion up to N levels?
+                    if (this.stage.status)
+                        this.stage.status.warn(`[${this.puppet.name}] Attempting to add recursive asset bundle. Skipping recursion...`)
+                    return container
+                }
+                if (!inherit.bundles)
+                    inherit.bundles = []
+                inherit.bundles.push(layer.id)
+            }
+
+            if (layer.scaleX != null || layer.scaleY != null) {
+                container.scale.set(layer.scaleX, layer.scaleY)
+            }
+
+            if (layer.x != null || layer.x != null) {
+                container.position.set(layer.x, layer.y)
+            }
+
+            if (layer.rotation != null) {
+                container.rotation = layer.rotation
+            }
+
+            const inh = Puppet.getInherit(layer, inherit);
+            (layer.children ? layer : this.stage.assets[layer.id].layers).children.forEach(child =>
+                container.addChild(this.createLayer(child, inh)))
+        } else {
+            let sprite = this.stage.getAsset(container, layer)
+            container.addChild(sprite)
+            if (layer.id in this.stage.assets && this.stage.assets[layer.id].type === 'particles')
+                this.particles.push(sprite.emitter)
+        }
+
+        // Set up the enter animation, if the layer has one
+        if (layer.animation && this.stage.environment.animations !== false) {
+            Puppet.createTween(layer, container)
+        }
+
+        return container
+    }
+
+    changeEmote(emote) {
+        this.emote = emote || '0'
+        const handleLayer = visible => layer => {
+            layer.visible = visible
+            if (visible &&
+                layer.animation &&
+                this.stage.environment.animations !== false) {
+                Puppet.createTween(layer, layer)
+            }
+        }
+        const setEmoteVisible = visible => emote => {
+            const h = handleLayer(visible)
+            emote.base.forEach(h)
+            emote.eyes.forEach(h)
+            emote.mouth.forEach(h)
+        }
+        Object.values(this.emotes).forEach(setEmoteVisible(false))
+        if (emote in this.emotes)
+            setEmoteVisible(true)(this.emotes[emote])
+        else if ('0' in this.emotes)
+            setEmoteVisible(true)(this.emotes['0'])
+        this.stage.dirty = true
+    }
+
+    setBabbling(babble) {
+        // Babbling will be triggered by holding down a button,
+        //  which could end up calling this function a bunch
+        //  so only do anything if we're actually changing the value
+        if (this.babbling == babble) return
+        this.babbling = babble
+
+        if (!babble) {
+            this.changeEmote(this.emote)
+
+            if (this.deadbonesStyle) {
+                this.deadbonesAnim = 0
+                this.deadbonesDuration = 200
+                this.deadbonesTargetY = this.deadbonesStartY = 0
+                this.deadbonesTargetRotation = this.deadbonesStartRotation = 0
+            }
+        }
+    }
+
+    jiggle() {
+        if (this.movingAnim === 0) this.movingAnim = 0.6
+    }
+
+    applyToAsset(id, callback, parent, layer) {
+        layer = layer || this.puppet.layers
+        
+        if (layer.children) {
+            layer.children.forEach(l => this.applyToAsset(id, callback, layer, l))
+        } else if (layer.id === id)
+            callback(parent, layer)
+    }
+
+    update(updateBabble = true) {
+        // Update position
+        this.updatePosition()
+
+        // Update emote
+        this.changeEmote(this.emote)
+
+        // Update babble
+        if (updateBabble) {
+            if (this.deadbonesStyle) {
+                this.deadbonesAnim = 0
+                this.deadbonesDuration = 100 + Math.random() * 200
+                this.deadbonesStartY = this.head.y = 10 - Math.random() * 20
+                this.deadbonesStartRotation = this.head.rotation = 0.1 - Math.random() * 0.2
+                this.head.forEach(a => {
+                    a.y = a.asset.y + this.deadbonesStartY
+                    a.rotation = a.asset.rotation + this.deadbonesStartRotation
+                })
+                this.deadbonesTargetY = 10 - Math.random() * 20
+                this.deadbonesTargetRotation = 0.1 - Math.random() * 0.2
+            } else {
+                this.updateEyeBabble()
+                this.updateMouthBabble()
+            }
+        }
+    }
+
+    updatePosition() {
+        this.container.scale.x = this.container.scale.y = (this.stage.environment.puppetScale || 1) 
+        this.container.scale.x *= this.facingLeft ? -1 : 1
+        this.container.y = this.stage.bounds.height / this.stage.puppetStage.scale.y
+        let pos = this.position % (this.stage.environment.numCharacters + 1)
+        if (pos < 0) pos += this.stage.environment.numCharacters + 1
+        this.container.x = pos <= 0 ? - Math.abs(this.container.width) / 2 :                      // Starting left of screen
+           pos >= this.stage.environment.numCharacters + 1 ? 
+           this.stage.environment.numCharacters * this.stage.slotWidth + Math.abs(this.container.width) / 2 :   // Starting right of screen
+           (pos - 0.5) * this.stage.slotWidth                                                     // Starting on screen
+        this.stage.dirty = true
+    }
+
+    updateEyeBabble() {
+        // Turn off any current eyes
+        const emotes = Object.values(this.emotes).filter(e => e.eyes.length > 0)
+        emotes.forEach(emote => emote.eyes.forEach(e => e.visible = false));
+
+        // Set new eyes
+        (emotes.length > 0 ? emotes[Math.floor(Math.random() * emotes.length)] : this.emotes['0'])
+            .eyes.forEach(e => e.visible = true)
+        this.eyesAnim = 0
+        this.eyesDuration = (0.1 + Math.random()) * this.eyeBabbleDuration
+        this.stage.dirty = true
+    }
+
+    updateMouthBabble() {
+        // Turn off any current mouths
+        const emotes = Object.values(this.emotes).filter(e => e.mouth.length > 0)
+        emotes.forEach(emote => emote.mouth.forEach(e => e.visible = false));
+
+        // Set new mouth
+        (emotes.length > 0 ? emotes[Math.floor(Math.random() * emotes.length)] : this.emotes['0'])
+            .mouth.forEach(e => e.visible = true)
+        this.mouthAnim = 0
+        this.mouthDuration = (0.1 + Math.random()) * this.mouthBabbleDuration
+        this.stage.dirty = true
+    }
+}
+
+module.exports = Puppet
+
+},{"pixi.js":145}],195:[function(require,module,exports){
+// imports
+const PIXI = require('pixi.js')
+window.PIXI = PIXI;
+window.PIXI[ "default" ] = PIXI;
+require('pixi-tween')
+const timer = require('pixi-timer')
+const Puppet = require('./puppet')
+const path = require('path')
+const trim = require('./../util/trimCanvas')
+
+// Aliases
+let BaseTextureCache = PIXI.utils.BaseTextureCache,
+    Container = PIXI.Container,
+    Sprite = PIXI.Sprite,
+    Texture = PIXI.Texture,
+    TextureCache = PIXI.utils.TextureCache,
+    autoDetectRenderer = PIXI.autoDetectRenderer,
+    loader = PIXI.loader,
+    Rectangle = PIXI.Rectangle,
+    ticker = PIXI.ticker,
+    Emitter = require('pixi-particles').Emitter
+
+// Constants
+const MOVE_DURATION = 0.75 // in seconds
+const defaultParticle = Texture.from('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACwAAAAsCAQAAAC0jZKKAAACPElEQVR4AbXXcW/TMBAF8EtCypa1LCDB9/98ILG1dKNNCOZZT8h6N4562eZTzH8/ni6dfWns4kqtvbMOT2tmv+0XasG/F1aTLFxd5lDcCS8o0tyX58K9bVA9WZe40LNNqLkevrJr1HvrC1vgQoM820/UqQZubQBKWDKjDJjP+wg41/J/eAOQsGb2rWDlvKzMTyEMaJvBIHNpBdswOfhoZ4VL2h3Irc+srSiJPYv9B1Mr3IHcCS2ZJTFf2+RZ1NEWD5PF7mmQ/nfs85I9klb4KrNCa2YkZitcXmVZpwL3zFtwpYH6l3cWtqDMPP+Fb+zWPthW6BvUIJmZuOTN7APqKOjB9vZAuAM6ArvFE9CSeI5Y1B7PPfAFMPKMKMWVZmbCzKusoveoKcODjQDzgx3c6GnUFnADOAFGV5V16B7PI2BkBRjgmf4IWBbYu8I6lPuhSa2w4xP8k7CF/l5Q7HuiZW9ST+wpjgKLvP9ed6gAJXztWcG/2CaAJ/tKlJSnm7RTTHHATQAnwAFKWCn/H3y2eH2L2ZfDIf06rXD8m768l//cAvzN/kBe709a8cPFQ4jXFA8hHpvVh1D9scmrqfbYrD/oO0s5caYrDvraqwlwW3811V6mvXUrLtOq6x+NYCt0vIqv/2hgcUPWqoFFRixlB9tEIxZHWKHJLmuGQraifijUMTbIq63QzDLGrh+8wVYO3rI6nzdohc+81H3cDHiijxvNfAJ9Wv855hJL5nnlB2Tw8ojzC7UelrXqk/cPn233eGpGsfAAAAAASUVORK5CYII=')
+
+/**
+ * @class
+ */
+class Stage {
+
+    /**
+     * @constructor
+     * @param {string} element - the id of the DOM element to append the stage to
+     * @param {Object} environment - object with information on the background, sizing, and positioning of the stage
+     * @param {Number} environment.numCharacters - The (integer) amount of slots on the stage, for puppets to be positioned in
+     * @param {Number} environment.puppetScale - A float modifier for each puppet's size
+     * @param {Number} environment.width - How big the environment is. The stage will make sure its covered by the environment
+     * @param {Number} environment.height - How big the environment is. The stage will make sure its covered by the environment
+     * @param {boolean} [environment.animations] - Whether or not animations should be enabled. Default is true
+     * @param {string} [environment.color] - Background color of the stage. Default is null
+     * @param {Object} [environment.layers] - Assets to add below and/or above the puppets. Default is to only have the puppets layer
+     * @param {Object[]} assets - array of assets
+     * @param {string} assetsPath - path to the assets folder
+     * @param {requestCallback} callback - function to be called after assets are loaded
+     * @param {Object} [status] - object for logging stuff
+     * @param {boolean} [enabled=true] - whether or not it should start updating from the start
+     */
+    constructor(element, environment, assets, assetsPath, callback, status, enabled) {
+        this.environment = environment
+        this.assets = assets
+        this.assetsPath = assetsPath
+        this.status = status
+        this.MOVE_DURATION = MOVE_DURATION
+        this.enabled = enabled === undefined ? true : enabled
+        this.dirty = true
+
+        // Create some basic objects
+        this.stage = new Container()
+        this.renderer = autoDetectRenderer(1, 1, {transparent: true})
+        this.screen = document.getElementById(element)
+        this.screen.appendChild(this.renderer.view)
+
+        // Set up environment layers and the puppet stage
+        this.background = new Container()
+        this.puppetStage = new Container()
+        this.foreground = new Container()
+        this.stage.addChild(this.background)
+        this.stage.addChild(this.puppetStage)
+        this.stage.addChild(this.foreground)
+        
+        this.lastFrame = Date.now()
+        this.puppets = []
+        this.listeners = []
+
+        // Make the game fit the entire window
+        this.renderer.view.style.position = "absolute";
+        this.renderer.view.style.display = "block";
+        this.renderer.view.style.backgroundColor = environment.color
+
+        // Load Assets
+        let stage = this
+        if (loader.loading) {
+            loader.onComplete.once(function() { 
+                stage.resize()
+                stage.updateEnvironment()
+                if (callback) requestAnimationFrame(() => {callback(stage)})
+                stage.gameLoop()
+            })
+            return
+        }
+        let texturesToLoad = false
+        Object.values(assets).forEach(asset => {
+            if (!TextureCache[path.join(assetsPath, asset.location)]) {
+                loader.add(path.join(assetsPath, asset.location))
+                texturesToLoad = true
+            }
+        })
+        if (texturesToLoad) {
+            loader.onComplete.once(function() { 
+                stage.resize()
+                stage.updateEnvironment()
+                if (callback) requestAnimationFrame(() => {callback(stage)})
+                stage.gameLoop()
+            })
+            loader.load()
+        } else {
+            loader.load()
+            stage.resize()
+            stage.updateEnvironment()
+            if (callback) requestAnimationFrame(() => {callback(stage)})
+            stage.gameLoop()
+        }
+    }
+
+    registerPuppetListener(event, callback) {
+        this.listeners.push({"event": event, "callback": callback})
+        this.puppets.forEach(p => p.container.on(event, callback))
+    }
+
+    addAsset(id, asset, callback) {
+        this.assets[id] = asset
+        let date = Date.now()
+        if (asset.type !== "bundle") {
+            TextureCache[path.join(this.assetsPath, asset.location)] =
+                Texture.fromImage(path.join(this.assetsPath, asset.location + "?random=" + date))
+            BaseTextureCache[path.join(this.assetsPath, asset.location)] =
+                BaseTextureCache[path.join(this.assetsPath, asset.location + "?random=" + date)]
+            if (callback)
+                TextureCache[path.join(this.assetsPath, asset.location)].baseTexture.on('loaded', callback)
+        } else if (callback)
+            callback()
+    }
+
+    reloadAssets(callback) {
+        Object.values(this.assets).filter(a => a.location).forEach(a => {
+            TextureCache[path.join(this.assetsPath, a.location)] =
+                Texture.fromImage(path.join(this.assetsPath, a.location))
+        })
+        let stage = this
+        let onLoad = () => {
+            if (!Object.values(BaseTextureCache).some(a => a.isLoading)) {
+                callback(stage)
+                ticker.shared.remove(onLoad)
+            }
+        }
+
+        this.reloadPuppets()
+        if (callback) {
+            ticker.shared.add(onLoad)
+        }
+    }
+
+    updateAsset(id) {
+        let stage = this
+        let callback = function(asset, sprite, layer, emote) {
+            let parent = sprite.parent
+            let index = parent.getChildIndex(sprite)
+            let newAsset = stage.getAsset(asset, layer, emote)
+            parent.removeChildAt(index)
+            parent.addChildAt(newAsset, index)
+        }
+        this.puppets.forEach(p => p.applyToAsset(id, callback))
+    }
+
+    reloadPuppets() {
+        this.puppets.forEach(p => this.setPuppet(p.id, this.createPuppet(p.puppet)))
+    }
+
+    reattach(element) {
+        this.screen = document.getElementById(element)
+        this.screen.appendChild(this.renderer.view)
+        this.resize()
+    }
+
+    resize(e, width, height) {
+        let rect = this.screen.getBoundingClientRect()
+        this.bounds = {
+            width: width || rect.width,
+            height: height || rect.height
+        }
+        if (this.bounds.width !== this.renderer.screen.width ||
+            this.bounds.height !== this.renderer.screen.height)
+            this.renderer.resize(this.bounds.width, this.bounds.height)
+        this.slotWidth = this.bounds.width / this.environment.numCharacters
+        if (this.slotWidth < 400) {
+            this.puppetStage.scale.x = this.puppetStage.scale.y = this.slotWidth / 400
+            this.slotWidth = 400
+        } else this.puppetStage.scale.x = this.puppetStage.scale.y = 1
+
+        const scale = Math.max(this.bounds.width / this.environment.width, this.bounds.height / this.environment.height)
+        this.background.scale.set(scale)
+        this.foreground.scale.set(scale)
+        this.background.position.set(this.bounds.width / 2, this.bounds.height)
+        this.foreground.position.set(this.bounds.width / 2, this.bounds.height)
+
+        this.puppets.forEach(p => p.updatePosition())
+    }
+
+    updateEnvironment() {
+        this.renderer.view.style.backgroundColor = this.environment.color
+        while (this.foreground.children[0])
+            this.foreground.removeChildAt(0)
+        while (this.background.children[0])
+            this.background.removeChildAt(0)
+        if (this.environment.layers && this.environment.layers.children) {
+            let i = 0
+            while (i < this.environment.layers.children.length &&
+                this.environment.layers.children[i].id !== 'CHARACTER_PLACEHOLDER') {
+                const container = new Puppet(this, { layers: this.environment.layers.children[i] }, -1).container
+                container.position.set(0)
+                container.scale.set(1)
+                this.background.addChild(container)
+                i++
+            }
+            i++
+            while (i < this.environment.layers.children.length) {
+                const container = new Puppet(this, { layers: this.environment.layers.children[i] }, -1).container
+                container.position.set(0)
+                container.scale.set(1)
+                this.foreground.addChild(container)
+                i++
+            }
+        }
+    }
+
+    createPuppet(puppet) {
+        return new Puppet(this, puppet, -1)
+    }
+
+    addPuppet(puppet, id) {
+        let newPuppet = new Puppet(this, puppet, id)
+        this.puppets.push(newPuppet)
+        this.puppetStage.addChild(newPuppet.container)
+        this.listeners.forEach(l => newPuppet.container.on(l.event, l.callback))
+        newPuppet.updatePosition()
+        return newPuppet
+    }
+
+    removePuppet(id) {
+        const puppet = this.puppets.find(p => p.id == id)
+        if (puppet) {
+            this.puppets.splice(this.puppets.indexOf(puppet), 1)
+            this.puppetStage.removeChild(puppet.container)
+        }
+        this.dirty = true
+    }
+
+    clearPuppets() {
+        while (this.puppets.length !== 0) {
+            this.puppetStage.removeChild(this.puppets[0].container)
+            this.puppets.splice(0, 1)
+        }
+        this.dirty = true
+    }
+
+    banishPuppets() {
+        this.puppets.forEach(puppet => {
+            if (puppet.target > this.environment.numCharacters / 2) {
+                puppet.target = this.environment.numCharacters + 1
+                puppet.facingLeft = false
+                puppet.container.scale.x = this.environment.puppetScale || 1
+            } else {
+                puppet.target = 0
+                puppet.facingLeft = true
+                puppet.container.scale.x = -1 * (this.environment.puppetScale || 1)
+            }
+        })
+    }
+
+    getPuppet(id) {
+        return this.puppets.find(p => p.id == id)
+    }
+
+    setPuppet(id, newPuppet) {
+        let oldPuppet = this.getPuppet(id)
+        newPuppet.changeEmote(oldPuppet.emote)
+        newPuppet.id = newPuppet.container.id = oldPuppet.id
+        newPuppet.position = oldPuppet.position
+        newPuppet.target = oldPuppet.target
+        newPuppet.facingLeft = oldPuppet.facingLeft
+        newPuppet.babbling = oldPuppet.babbling
+        this.listeners.forEach(l => newPuppet.container.on(l.event, l.callback))
+
+        this.puppets[this.puppets.indexOf(oldPuppet)] = newPuppet
+        this.puppetStage.removeChild(oldPuppet.container)
+        this.puppetStage.addChild(newPuppet.container)
+        this.resize()
+
+        return newPuppet
+    }
+
+    getThumbnail() {
+        this.renderer.render(this.stage)
+        try {
+            return trim(this.renderer.view).canvas.toDataURL().replace(/^data:image\/\w+;base64,/, "")
+        } catch(e) {
+            this.status.error("Failed to generate thumbnail", e)
+            return null
+        }
+    }
+
+    gameLoop() {
+        let thisFrame = Date.now()
+        let delta = thisFrame - this.lastFrame
+        this.lastFrame = thisFrame
+
+        requestAnimationFrame(this.gameLoop.bind(this))
+        if (this.enabled) this.update(delta)
+    }
+
+    getAsset(container, asset) {
+        let sprite        
+        container.x = asset.x
+        container.y = asset.y
+        container.rotation = asset.rotation
+        container.asset = asset
+        if (this.assets[asset.id]) {
+            let assetData = this.assets[asset.id]
+            if (assetData.type === "animated") {
+                let base = BaseTextureCache[path.join(this.assetsPath, assetData.location)]
+                let textures = []
+                let width = base.width / assetData.cols
+                let height = base.height / assetData.rows
+                for (let i = 0; i < assetData.numFrames; i++) {
+                    if ((i % assetData.cols) * width + width > base.width || Math.floor(i / assetData.cols) * height + height > base.height) continue
+                    let rect = new Rectangle((i % assetData.cols) * width, Math.floor(i / assetData.cols) * height, width, height)
+                    textures.push(new Texture(base, rect))
+                }
+                sprite = new PIXI.extras.AnimatedSprite(textures)
+                sprite.animationSpeed = 20 / assetData.delay
+                sprite.play()
+            } else if (assetData.type === 'particles') {
+                const image = assetData.location ? TextureCache[path.join(this.assetsPath, assetData.location)] : defaultParticle
+                sprite = new Emitter(container, [image], assetData.emitter)
+                sprite.emit = true
+                container.scale.set(asset.scaleX, asset.scaleY)
+                container.emitter = sprite
+                return container
+            } else sprite = new Sprite(TextureCache[path.join(this.assetsPath, assetData.location)])
+        } else {
+            sprite = new Sprite()
+            if (this.status) this.status.log("Unable to load asset \"" + asset.id + "\"", 5, 2)
+        }
+        sprite.scale.set(asset.scaleX, asset.scaleY)
+        sprite.anchor.set(.5, .5)
+        container.addChild(sprite)
+        return container
+    }
+
+    update(delta) {
+        this.puppets.forEach(puppet => {
+            let particles = puppet.particles.filter(emitter => emitter.emit || emitter._activeParticlesFirst)
+            if (particles.length) {
+                this.dirty = true
+                particles.forEach(p => p.update(delta / 1000))
+            }
+            // Movement animations
+            // I've tried to emulate what puppet pals does as closely as possible
+            // But frankly it's difficult to tell
+            if (puppet.target != puppet.position || puppet.movingAnim !== 0) {
+                this.dirty = true
+                // Whether its going left or right
+                if (puppet.direction === 0 && puppet.target != puppet.position)
+                    puppet.direction = puppet.target > puppet.position ? 1 : -1
+                // Update how far into the animation we are
+                puppet.movingAnim += delta / (1000 * MOVE_DURATION)
+
+                // We want to do a bit of animation when they arrive at the target slot. 
+                //  in order to do that we have part of the animation (0 - .6) be for each slot
+                //  and the rest (.6 - 1) only plays at the destination slot
+                while (puppet.position != puppet.target && puppet.movingAnim >= 0.6) {
+                    // Once we pass .6, update our new slot position
+                    puppet.position += puppet.direction
+
+                    // Check if we're at the final slot yet
+                    if (puppet.position == puppet.target) {
+                        puppet.direction = 0
+                        puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.environment.puppetScale || 1)
+                    } else {
+                        // Otherwise remove .6 from the animation
+                        puppet.movingAnim -= 0.6
+                    }
+                }
+                // Check if we're done animating
+                if (puppet.movingAnim >= 1) {
+                    puppet.movingAnim = 0
+                    puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.environment.puppetScale || 1)
+                } else if (puppet.movingAnim < 0.6)
+                    // If we're still animating make our rotation based on direction rather than puppet.facingLeft
+                    puppet.container.scale.x = puppet.direction * (this.environment.puppetScale || 1)
+
+                // Scale in a sin formation such that it does 3 half circles per slot, plus 2 more at the end
+                puppet.container.scale.y = (1 + Math.sin((1 + puppet.movingAnim * 5) * Math.PI) / 40) * (this.environment.puppetScale || 1) 
+                // Update y value so it doesn't leave the bottom of the screen while bouncing
+                puppet.container.y = this.bounds.height / this.puppetStage.scale.y
+                // Linearly move across the slot, unless we're in the (.6 - 1) part of the animation, and ensure we're off screen even when the puppets are large
+                let interpolation = Math.min(1, puppet.movingAnim / 0.6)
+                let pos = puppet.position % (this.environment.numCharacters + 1)
+                if (pos < 0) pos += this.environment.numCharacters + 1
+                let start = pos == 0 ?
+                    puppet.direction === 1 ? - Math.abs(puppet.container.width) :                        // Starting on left edge of screen
+                        this.environment.numCharacters * this.slotWidth + Math.abs(puppet.container.width) : // Starting on right edge of screen
+                    (pos - 0.5) * this.slotWidth                                                         // Ending on screen
+                pos += puppet.direction
+                if (pos < 0) pos += this.environment.numCharacters + 1
+                let end = pos <= 0 ? - Math.abs(puppet.container.width) :                            // Starting left of screen
+                    pos >= this.environment.numCharacters + 1 ? 
+                    this.environment.numCharacters * this.slotWidth + Math.abs(puppet.container.width) : // Starting right of screen
+                    (pos - 0.5) * this.slotWidth                                                     // Ending on screen
+                puppet.container.x = interpolation === 1 ? start : start + (end - start) * interpolation
+            }
+            if (puppet.babbling) {
+                this.dirty = true
+                // Update how long each face part has been on display
+                puppet.eyesAnim += delta
+                puppet.mouthAnim += delta
+
+                // Update eyes
+                if (puppet.eyesAnim >= puppet.eyesDuration && (puppet.emote === '0' || !puppet.emotes[puppet.emote])) {
+                    puppet.updateEyeBabble()
+                }
+
+                // Update mouth
+                if (puppet.mouthAnim >= puppet.mouthDuration) {
+                    puppet.updateMouthBabble()
+                }
+            }
+            // Update DeadbonesStyle Babbling
+            // I'm not sure what Puppet Pals does, but I'm pretty sure this isn't it
+            // But I think this looks "close enough", and probably the best I'm going
+            // to get without Rob actually telling people how Puppet Pals does it
+            if (puppet.deadbonesStyle && (puppet.babbling || puppet.deadbonesDuration !== 0)) {
+                this.dirty = true
+                puppet.deadbonesAnim += delta
+                if (puppet.deadbonesAnim >= puppet.deadbonesDuration) {
+                    puppet.deadbonesAnim = 0
+                    if (puppet.babbling) {
+                        puppet.deadbonesDuration = 100 + Math.random() * 200
+                        puppet.deadbonesStartY = puppet.deadbonesTargetY
+                        puppet.deadbonesStartRotation = puppet.deadbonesTargetRotation
+                        puppet.head.forEach(a => {
+                            a.y = (a.asset.y || 0) + puppet.deadbonesStartY
+                            a.rotation = (a.asset.rotation || 0) + puppet.deadbonesStartRotation
+                        })
+                        puppet.deadbonesTargetY = 10 - Math.random() * 20
+                        puppet.deadbonesTargetRotation = 0.1 - Math.random() * 0.2
+                    } else {
+                        puppet.deadbonesDuration = 0
+                        puppet.head.forEach(a => {
+                            a.y = (a.asset.y || 0) + puppet.deadbonesTargetY
+                            a.rotation = (a.asset.rotation || 0) + puppet.deadbonesTargetRotation
+                        })
+                    }
+                } else {
+                    let percent = (puppet.deadbonesAnim / puppet.deadbonesDuration) * (puppet.deadbonesAnim / puppet.deadbonesDuration)
+                    puppet.head.forEach(a => {
+                        a.y = (a.asset.y || 0) + puppet.deadbonesStartY + (puppet.deadbonesTargetY - puppet.deadbonesStartY) * percent
+                        a.rotation = (a.asset.rotation || 0) + puppet.deadbonesStartRotation + (puppet.deadbonesTargetRotation - puppet.deadbonesStartRotation) * percent
+                    })
+                }
+            }
+        })
+        if (this.dirty)
+            this.renderer.render(this.stage)
+        this.dirty = false
+        PIXI.timerManager.update(delta / 1000)
+        if (PIXI.tweenManager.tweens.length > 0)
+            this.dirty = true
+        PIXI.tweenManager.update(delta / 1000)
+    }
+}
+
+module.exports = Stage
+
+},{"./../util/trimCanvas":196,"./puppet":194,"path":9,"pixi-particles":27,"pixi-timer":28,"pixi-tween":29,"pixi.js":145}],196:[function(require,module,exports){
 // Modified from https://gist.github.com/timdown/021d9c8f2aabc7092df564996f5afbbf
 
 module.exports = trimCanvas
@@ -40877,5 +43039,5 @@ function trimCanvas (canvas) {
     }
 }
 
-},{}]},{},[4])(4)
+},{}]},{},[1])(1)
 });
