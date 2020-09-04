@@ -82,6 +82,7 @@ class Puppet {
         this.stage = stage
         this.id = id
         this.container = new Container()
+        this.direction = 0
         this.position = this.target = puppet.position
         this.facingLeft = puppet.facingLeft
         this.deadbonesStyle = puppet.deadbonesStyle
