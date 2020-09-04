@@ -361,8 +361,7 @@ class Stage {
             if (puppet.target != puppet.position || puppet.movingAnim !== 0) {
                 this.dirty = true
                 // Whether its going left or right
-                if (puppet.direction === 0 && puppet.target != puppet.position)
-                    puppet.direction = puppet.target > puppet.position ? 1 : -1
+                let direction = Math.sign(puppet.target - puppet.position)
                 // Update how far into the animation we are
                 puppet.movingAnim += delta / (1000 * MOVE_DURATION)
 
@@ -371,11 +370,11 @@ class Stage {
                 //  and the rest (.6 - 1) only plays at the destination slot
                 while (puppet.position != puppet.target && puppet.movingAnim >= 0.6) {
                     // Once we pass .6, update our new slot position
-                    puppet.position += puppet.direction
+                    puppet.position += direction
 
                     // Check if we're at the final slot yet
                     if (puppet.position == puppet.target) {
-                        puppet.direction = 0
+                        direction = 0
                         puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.environment.puppetScale || 1)
                     } else {
                         // Otherwise remove .6 from the animation
@@ -388,7 +387,7 @@ class Stage {
                     puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.environment.puppetScale || 1)
                 } else if (puppet.movingAnim < 0.6)
                     // If we're still animating make our rotation based on direction rather than puppet.facingLeft
-                    puppet.container.scale.x = puppet.direction * (this.environment.puppetScale || 1)
+                    puppet.container.scale.x = direction * (this.environment.puppetScale || 1)
 
                 // Scale in a sin formation such that it does 3 half circles per slot, plus 2 more at the end
                 puppet.container.scale.y = (1 + Math.sin((1 + puppet.movingAnim * 5) * Math.PI) / 40) * (this.environment.puppetScale || 1) 
@@ -399,10 +398,10 @@ class Stage {
                 let pos = puppet.position % (this.environment.numCharacters + 1)
                 if (pos < 0) pos += this.environment.numCharacters + 1
                 let start = pos == 0 ?
-                    puppet.direction === 1 ? - Math.abs(puppet.container.width) :                        // Starting on left edge of screen
+                    direction === 1 ? - Math.abs(puppet.container.width) :                        // Starting on left edge of screen
                         this.environment.numCharacters * this.slotWidth + Math.abs(puppet.container.width) : // Starting on right edge of screen
                     (pos - 0.5) * this.slotWidth                                                         // Ending on screen
-                pos += puppet.direction
+                pos += direction
                 if (pos < 0) pos += this.environment.numCharacters + 1
                 let end = pos <= 0 ? - Math.abs(puppet.container.width) :                            // Starting left of screen
                     pos >= this.environment.numCharacters + 1 ? 

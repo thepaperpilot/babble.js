@@ -91,7 +91,6 @@ class Puppet {
         this.deadbonesTargetRotation = this.deadbonesStartRotation = 0
         this.eyeBabbleDuration = puppet.eyeBabbleDuration || 2000
         this.mouthBabbleDuration = puppet.mouthBabbleDuration || 270
-        this.direction = 0
         this.head = []
         this.particles = []
         this.emotes = { }
