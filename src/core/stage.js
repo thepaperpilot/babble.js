@@ -397,11 +397,13 @@ class Stage {
                 // Linearly move across the slot, unless we're in the (.6 - 1) part of the animation, and ensure we're off screen even when the puppets are large
                 let interpolation = Math.min(1, puppet.movingAnim / 0.6)
                 let pos = puppet.position % (this.environment.numCharacters + 1)
+                if (pos < 0) pos += this.environment.numCharacters + 1
                 let start = pos == 0 ?
                     puppet.direction === 1 ? - Math.abs(puppet.container.width) :                               // Starting on left edge of screen
                         this.environment.numCharacters * this.slotWidth + Math.abs(puppet.container.width) :    // Starting on right edge of screen
                     (pos - 0.5) * this.slotWidth                                                                // Starting on screen
                 pos += puppet.direction
+                if (pos < 0) pos += this.environment.numCharacters + 1
                 let end = pos <= 0 ? - Math.abs(puppet.container.width) :                            // Starting left of screen
                     pos >= this.environment.numCharacters + 1 ? 
                     this.environment.numCharacters * this.slotWidth + Math.abs(puppet.container.width) : // Starting right of screen
