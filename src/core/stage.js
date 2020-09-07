@@ -369,7 +369,7 @@ class Stage {
                 // We want to do a bit of animation when they arrive at the target slot. 
                 //  in order to do that we have part of the animation (0 - .6) be for each slot
                 //  and the rest (.6 - 1) only plays at the destination slot
-                while (puppet.direction !== 0 && puppet.movingAnim >= 0.6) {
+                while (puppet.direction !== 0 && puppet.movingAnim >= 0.6 && !puppet.jiggling) {
                     // Once we pass .6, update our new slot position
                     puppet.position += puppet.direction
                     puppet.direction = Math.sign(puppet.target - puppet.position)
@@ -377,6 +377,7 @@ class Stage {
                     // Check if we're at the final slot yet
                     if (puppet.direction === 0) {
                         puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.environment.puppetScale || 1)
+                        puppet.jiggling = true
                     } else {
                         // Otherwise remove .6 from the animation
                         puppet.movingAnim -= 0.6
@@ -386,6 +387,7 @@ class Stage {
                 if (puppet.movingAnim >= 1) {
                     puppet.movingAnim = 0
                     puppet.container.scale.x = (puppet.facingLeft ? -1 : 1) * (this.environment.puppetScale || 1)
+                    puppet.jiggling = false
                 } else if (puppet.direction !== 0)
                     // If we're still animating make our rotation based on direction rather than puppet.facingLeft
                     puppet.container.scale.x = puppet.direction * (this.environment.puppetScale || 1)

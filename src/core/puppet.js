@@ -92,6 +92,7 @@ class Puppet {
         this.deadbonesTargetRotation = this.deadbonesStartRotation = 0
         this.eyeBabbleDuration = puppet.eyeBabbleDuration || 2000
         this.mouthBabbleDuration = puppet.mouthBabbleDuration || 270
+        this.jiggling = false
         this.head = []
         this.particles = []
         this.emotes = { }
@@ -260,7 +261,10 @@ class Puppet {
     }
 
     jiggle() {
-        if (this.movingAnim === 0) this.movingAnim = 0.6
+        if (this.movingAnim === 0) {
+            this.movingAnim = 0.6
+            this.jiggling = true
+        }
     }
 
     applyToAsset(id, callback, parent, layer) {
