@@ -100,6 +100,10 @@ class Puppet {
         // Construct Puppet
         this.container.addChild(this.createLayer(puppet.layers))
 
+        // Add default emote if not present
+        if (!('0' in this.emotes))
+            this.emotes['0'] = { name: "default", base: [], eyes: [], mouth: [] }
+
         // Finish Setup
         this.changeEmote(puppet.emote)
 
